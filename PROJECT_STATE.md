@@ -1,158 +1,104 @@
-# JANSETHU AI - PROJECT STATE
+# JANSETHU AI - PROJECT STATE & FINAL AUDIT
 
 **Last Updated:** 2026-09-16  
-**Current Phase:** Phase 2 (FastAPI + Database) Completed  
-**Status:** Backend Database & REST API Active & Fully Connected to React PWA
+**Final Status:** ✅ PASSED ALL AUDITS — Presentation-Ready Hackathon Prototype  
+**Audited Components:** Smartphone PWA, FastAPI Backend, SQLite Database, Provider Dashboard, Web Speech Voice Engine, OpenStreetMap Leaflet Map, Keypad Phone IVR Channel, Emergency 108 Access Flow.
 
 ---
 
 ## 1. Project Overview
-JanSethu AI is a voice-first healthcare access platform designed for underserved and low-literacy users. It allows smartphone PWA users and feature phone callers to discover healthcare facilities, check slot availability, request appointments, and access emergency services.
+JanSethu AI is a voice-first healthcare access platform designed especially for underserved and low-literacy users. It bridges the digital divide by offering two simple access channels:
+1. **Smartphone Users (PWA)**: Voice/text interaction, healthcare facility discovery, slot viewing, appointment request, confirmation ticket, interactive Leaflet map, emergency access, and provider dashboard.
+2. **Keypad / Basic-Phone Users (IVR Voice Call)**: Feature phone call channel using speech-to-text, TwiML IVR responses, SQLite appointment booking, and SMS confirmations without requiring a smartphone or internet.
 
-> **CRITICAL ARCHITECTURAL RULE:** The SQLite database is the prototype's source of truth. AI components must NEVER invent hospital availability, doctor slots, or facility info.
-
----
-
-## 2. Phase Tracker
-| Phase | Title | Status | Description |
-|-------|-------|--------|-------------|
-| **Phase 1** | Foundation & PWA UI Screens | ✅ COMPLETED | Vite+React, Tailwind CSS, PWA config, 8 Core Screens with responsive mobile-first layout |
-| **Phase 2** | FastAPI + Database Backend | ✅ COMPLETED | SQLite DB (`jansethu.db`), SQLAlchemy models (`facilities`, `slots`, `appointments`), REST APIs, seed data, frontend API wiring |
-| **Phase 3** | Voice Assistant & Intent Engine | ⏳ NEXT | Web Speech API voice capture, intent parser (`find_facility`, `check_availability`, etc.), missing info dialog |
-| **Phase 4** | Facility Discovery & Map View | 🔲 PENDING | Leaflet / OpenStreetMap integration, GPS location filter, interactive facility details |
-| **Phase 5** | Provider Dashboard Workflow | 🔲 PENDING | Real-time appointment management, confirmation/rejection workflow, slot creation |
-| **Phase 6** | Telephony / Voice Provider Integration | 🔲 PENDING | Telephony webhook handler for basic keypad phone voice calls |
+> **CRITICAL ARCHITECTURAL RULE & SAFETY POLICY:** The SQLite database (`jansethu.db`) is the prototype's source of truth. Both smartphone PWA users and feature-phone voice callers query and update the exact same `facilities`, `slots`, and `appointments` tables. AI components NEVER invent hospital availability, doctor slots, or clinical diagnoses.
 
 ---
 
-## 3. Completed Work (Phase 2 FastAPI + Database)
-- [x] Configured SQLite database with SQLAlchemy (`backend/database.py`).
-- [x] Created database schema models (`Facility`, `Slot`, `Appointment`) in `backend/models.py`.
-- [x] Implemented Pydantic validation schemas (`backend/schemas.py`).
-- [x] Implemented query CRUD layer (`backend/crud.py`).
-- [x] Developed database seed script (`backend/seed.py`) with 5 realistic DEMO facilities (District Hospital, PHCs, CHCs, Mobile Van) and doctor slots in Jaipur & Delhi.
-- [x] Developed FastAPI backend application (`backend/main.py`) with CORS middleware.
-- [x] Implemented & verified REST API endpoints:
-  - `GET /facilities` (and `/api/facilities`): List facilities with city, area, service, search query filters.
-  - `GET /facilities/{id}` (and `/api/facilities/{id}`): Facility detail by ID.
-  - `GET /facilities/{id}/slots` (and `/api/facilities/{id}/slots`): Available doctor/OPD slots for a facility.
-  - `POST /appointments` (and `/api/appointments`): Create appointment request and update slot availability.
-  - `GET /appointments/{id}` (and `/api/appointments/{id}`): Get single appointment request by ID.
-  - `GET /appointments` (and `/api/appointments`): List appointments for provider tracking.
-  - `PATCH /appointments/{id}/status` (and `/api/appointments/{id}/status`): Status updates (`pending`, `confirmed`, `rejected`, `rescheduled`).
-  - `GET /emergency` (and `/api/emergency`): National emergency helplines & advice.
-- [x] Connected React PWA screens to backend APIs (`FacilityResultsScreen`, `SlotSelectionScreen`, `ConfirmationScreen`, `ProviderDashboardScreen`) with graceful mock fallback if offline.
-- [x] Verified unit tests (`backend/test_backend.py`) — `All Phase 2 Backend API Tests Passed Cleanly!`.
+## 2. Comprehensive System Architecture
 
----
-
-## 4. Database Schema Structure (`jansethu.db`)
-
-### 1. `facilities` Table
-- `id`: INTEGER PRIMARY KEY
-- `name`: VARCHAR (Hospital / Centre Name in English)
-- `name_hi`: VARCHAR (Hindi Name)
-- `city`: VARCHAR (City/District)
-- `area`: VARCHAR (Area/Locality)
-- `address`: TEXT (Full Address)
-- `latitude`: FLOAT (GPS Latitude)
-- `longitude`: FLOAT (GPS Longitude)
-- `services`: TEXT (CSV string of services offered)
-- `contact_phone`: VARCHAR (Contact Number)
-- `facility_type`: VARCHAR (Hospital, PHC, CHC, Mobile Clinic)
-
-### 2. `slots` Table
-- `id`: INTEGER PRIMARY KEY
-- `facility_id`: INTEGER FOREIGN KEY -> `facilities.id`
-- `date`: VARCHAR (YYYY-MM-DD or 'Today', 'Tomorrow')
-- `time`: VARCHAR (HH:MM AM/PM)
-- `available`: BOOLEAN (True = Open, False = Booked)
-- `doctor_name`: VARCHAR (Assigned Doctor)
-- `department`: VARCHAR (Department/OPD)
-
-### 3. `appointments` Table
-- `id`: INTEGER PRIMARY KEY
-- `facility_id`: INTEGER FOREIGN KEY -> `facilities.id`
-- `service`: VARCHAR (Requested Service/OPD)
-- `date`: VARCHAR (Appointment Date)
-- `time`: VARCHAR (Appointment Time)
-- `patient_name`: VARCHAR (Patient Name)
-- `phone`: VARCHAR (Patient Mobile Phone)
-- `status`: VARCHAR ('pending', 'confirmed', 'rejected', 'rescheduled')
-- `created_at`: DATETIME
-
----
-
-## 5. Created / Modified Files Map
 ```
-JanSethu AI/
-├── PROJECT_STATE.md
-├── backend/
-│   ├── main.py             # FastAPI routes for /facilities, /slots, /appointments
-│   ├── database.py         # SQLAlchemy engine & SQLite session
-│   ├── models.py           # Facility, Slot, Appointment ORM models
-│   ├── schemas.py          # Pydantic schemas
-│   ├── crud.py             # Database query operations
-│   ├── seed.py             # Demo data generator
-│   ├── requirements.txt    # FastAPI, Uvicorn, SQLAlchemy, Pydantic, Pytest
-│   └── test_backend.py     # Backend API unit tests
-└── frontend/
-    ├── package.json        # Dependencies (React, Vite, Tailwind, Lucide, Axios)
-    ├── vite.config.js      # Vite dev server with /api proxy
-    ├── tailwind.config.js  # Custom theme
-    ├── postcss.config.js   # PostCSS config
-    ├── index.html          # PWA container
-    ├── public/
-    │   ├── manifest.json   # Web App Manifest
-    │   └── sw.js           # PWA Service Worker
-    └── src/
-        ├── main.jsx        # Entry point
-        ├── index.css       # Tailwind directives
-        ├── mockData.js     # Static/mock fallback data
-        ├── api.js          # Connected API client with fallback
-        ├── App.jsx         # App shell & router
-        ├── components/
-        │   ├── Header.jsx
-        │   ├── Navigation.jsx
-        │   ├── DemoBadge.jsx
-        │   └── HealthStatus.jsx
-        └── screens/
-            ├── HomeScreen.jsx
-            ├── VoiceAssistantScreen.jsx
-            ├── SearchScreen.jsx
-            ├── FacilityResultsScreen.jsx
-            ├── SlotSelectionScreen.jsx
-            ├── ConfirmationScreen.jsx
-            ├── ProviderDashboardScreen.jsx
-            └── EmergencyScreen.jsx
+                       JANSETHU AI
+                            |
+         +------------------+------------------+
+         |                  |                  |
+    SMARTPHONE PWA    KEYPAD PHONE CALL    PROVIDER
+     (Voice / UI)      (Telephony / IVR)   DASHBOARD
+         |                  |                  |
+         +------------------+------------------+
+                            |
+                     FASTAPI BACKEND
+                            |
+                 VOICE & INTENT ENGINE
+               (Rule-based Entity Parser)
+                            |
+                    CENTRAL DATABASE
+                  (SQLite: jansethu.db)
+                            |
+                HEALTHCARE FACILITY DATA
+              (Hospitals, PHCs, CHCs, Slots)
 ```
 
 ---
 
-## 6. System Status Matrix
-- **Database Status:** ✅ SQLite (`backend/jansethu.db`) active & seeded with DEMO data.
-- **Backend APIs:** ✅ All endpoints functional and verified (`test_backend.py` passed with exit code 0).
-- **Frontend Integration:** ✅ Connected React screens fetch live data from FastAPI backend with fallback.
-- **PWA Status:** ✅ Service Worker & Manifest configured.
+## 3. End-to-End Audit & Test Results
+
+### 1. Smartphone PWA Flow: ✅ VERIFIED
+- Home ➔ Language Selector (`Hindi` / `English`) ➔ Voice/Text Search ➔ Facility Results ➔ OpenStreetMap Leaflet View ➔ Slot Picker ➔ Patient Request Submission ➔ Ticket Generation.
+
+### 2. Healthcare Provider Flow: ✅ VERIFIED
+- Provider Portal ➔ Overview Stats ➔ Patient Request List ➔ View Details Modal ➔ Confirm Request ➔ Reschedule Request ➔ Reject Request ➔ Doctor Slot CRUD.
+- **Single Source of Truth Verified**: Provider actions write directly to `jansethu.db` and immediately reflect on patient PWA screens.
+
+### 3. Voice AI & Intent Engine Flow: ✅ VERIFIED
+- Tested all 6 core intents on `POST /voice/intent` & Web Speech API:
+  1. `find_facility`: Returned matching government hospitals & PHCs.
+  2. `check_availability`: Queried open slots for date & locality.
+  3. `appointment_request`: Checked missing parameter prompts, retrieved open slots, & generated booking.
+  4. `facility_information`: Returned address & contact telephone numbers.
+  5. `emergency_help`: Routed immediately to 108 Ambulance dispatcher.
+  6. `fallback`: Provided helpful rephrasing prompts.
+
+### 4. Interactive Map Flow: ✅ VERIFIED
+- OpenStreetMap Leaflet component (`FacilityMap.jsx`) rendering database markers, popups, slot selection, and external Google Maps GPS directions.
+
+### 5. Emergency Access Flow: ✅ VERIFIED
+- High-contrast non-diagnostic safety disclaimer banner, 1-tap `tel:108` ambulance dispatcher call button, location read-out helper card for low-literacy users, human helplines (104, 181, 1098), and emergency hospital list.
+
+### 6. Keypad Phone IVR Channel: ✅ VERIFIED
+- Keypad Phone Simulator UI (`PhoneSimulatorScreen.jsx`), TwiML voice XML generator (`/telephony/voice`, `/gather`, `/sms`), keypad DTMF processing (press 1 for Hindi, 2 for English), and SMS dispatch. Uses the **SAME FastAPI backend and SQLite database**.
+
+### 7. PWA Compliance & Mobile Responsiveness: ✅ VERIFIED
+- PWA manifest (`manifest.json`), Service Worker (`sw.js`), touch pan/zoom supported, fully responsive across mobile, tablet, and desktop viewports.
 
 ---
 
-## 7. Exact Commands to Run
+## 4. Safety & Compliance Audit
+
+- [x] **AI Hallucination Prevention**: All hospital, doctor, and slot availability data comes strictly from SQLite (`jansethu.db`).
+- [x] **Non-Diagnostic Policy**: System explicitly states it is an access platform and does NOT provide medical advice, diagnosis, or treatment.
+- [x] **Data Transparency**: All demo data clearly marked with `DemoBadge` (*PROTOTYPE / DEMO DATA ONLY*).
+- [x] **No Fake Integrations**: Telephony channel operates in a transparent **Mock Mode** with documented environment setup for production provider credentials.
+
+---
+
+## 5. Technical Limitations & Caveats
+- **Browser Web Speech API Support**: Web Speech recognition operates on Chrome, Edge, and Safari. A **visible text input fallback** is provided on screen for other browsers or noisy environments.
+- **Production Telephony Credentials**: Provider call channel defaults to **Mock Mode**. Live phone calls require setting `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER`.
+
+---
+
+## 6. Exact Startup Commands
 
 ### Run Backend API (FastAPI + Uvicorn):
 ```bash
 cd backend
 py -3 -m uvicorn main:app --reload --port 8000
 ```
-Interactive Swagger API docs: `http://localhost:8000/docs`
+Swagger interactive docs: `http://localhost:8000/docs`  
+Telephony config check: `http://localhost:8000/api/telephony/config`
 
-### Re-seed SQLite Database:
-```bash
-cd backend
-py -3 seed.py
-```
-
-### Run Backend Unit Tests:
+### Run Backend Audit Unit Tests:
 ```bash
 cd backend
 py -3 test_backend.py
@@ -163,9 +109,9 @@ py -3 test_backend.py
 cd frontend
 npm run dev
 ```
-URL: `http://localhost:3000`
+PWA URL: `http://localhost:3000`
 
-### Build Frontend Production Bundle:
+### Build Production Bundle:
 ```bash
 cd frontend
 npm run build
@@ -173,10 +119,24 @@ npm run build
 
 ---
 
-## 8. Next Phase (Phase 3)
-**Phase 3: Voice Assistant & Real Intent Engine**
-- Browser Web Speech API (`SpeechRecognition` & `SpeechSynthesis`).
-- Intent parsing (`find_facility`, `check_availability`, `appointment_request`, `facility_information`, `emergency_help`, `fallback`).
-- Conversational state manager for missing parameters (City, Service, Date).
+## 7. 3-Minute Hackathon Demo Script
 
-*Note: Development will proceed to Phase 3 upon explicit user instruction.*
+1. **Step 1: Voice AI Assistant (45 sec)**
+   - Click **"Voice Assistant"** or Mic button.
+   - Click sample prompt: *"I need a fever doctor tomorrow in Sanganer"*.
+   - Point out speech recognition, intent parser (`appointment_request`), database slot lookup, and Text-to-Speech audio output.
+2. **Step 2: Facility Discovery & OpenStreetMap View (30 sec)**
+   - Click **"View Matching Slots"** or go to **Facilities ➔ Interactive Map**.
+   - Show Leaflet OpenStreetMap pins for Jaipur/Delhi hospitals, click pin popup, and view details.
+3. **Step 3: Slot Selection & Ticket Generation (45 sec)**
+   - Select an available OPD slot (e.g. 10:30 AM).
+   - Enter patient name (*Ram Lal*) and phone (*+91-9876543210*). Click **Confirm Request**.
+   - Show generated **Appointment Ticket** with Ticket ID.
+4. **Step 4: Provider Dashboard Management (30 sec)**
+   - Open **Dashboard** tab. Show overview counters.
+   - Click **Confirm** (updates DB status to `CONFIRMED`) or **Reschedule**. Show that patient view updates in real-time.
+5. **Step 5: Keypad Phone IVR Call Simulator (30 sec)**
+   - Open **Keypad Call** tab (Nokia feature phone mockup).
+   - Click **START CALL**, press `1` for Hindi, speak request, and watch IVR speech response & incoming SMS receipt toast.
+6. **Step 6: Emergency Access & Non-Diagnostic Disclaimer (15 sec)**
+   - Open **Emergency** tab. Point out the 108 ambulance dialer, location read-out card, and non-diagnostic safety policy.

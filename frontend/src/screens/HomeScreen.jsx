@@ -1,15 +1,17 @@
-import React from 'react';
-import { Mic, Search, PhoneCall, Building2, Calendar, Stethoscope, HeartPulse, ShieldAlert } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mic, Search, PhoneCall, Building2, Calendar, Stethoscope, HeartPulse, ShieldAlert, Play, CheckCircle2, Smartphone, LayoutDashboard, Map } from 'lucide-react';
 import DemoBadge from '../components/DemoBadge';
 
 export default function HomeScreen({ setActiveScreen, lang }) {
+  const [showDemoGuide, setShowDemoGuide] = useState(true);
+
   return (
     <div className="space-y-6 pb-6">
       {/* Top Banner & Hero */}
       <div className="bg-gradient-to-br from-sky-700 via-sky-800 to-indigo-900 text-white rounded-3xl p-6 shadow-md relative overflow-hidden">
         <div className="flex items-center justify-between mb-3">
           <span className="bg-amber-400 text-slate-950 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider">
-            {lang === 'hi' ? 'वॉयस-फर्स्ट प्लेटफॉर्म' : 'Voice-First Platform'}
+            {lang === 'hi' ? 'वॉयस-फर्स्ट प्लेटफ़ॉर्म' : 'Voice-First Platform'}
           </span>
           <DemoBadge lang={lang} />
         </div>
@@ -40,6 +42,83 @@ export default function HomeScreen({ setActiveScreen, lang }) {
           </button>
         </div>
       </div>
+
+      {/* 2-MINUTE HACKATHON DEMO WALKTHROUGH BANNER */}
+      {showDemoGuide && (
+        <div className="bg-slate-900 text-white p-5 rounded-3xl border-2 border-amber-400 shadow-xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Play className="w-5 h-5 text-amber-400 fill-amber-400 animate-pulse" />
+              <h2 className="font-extrabold text-base text-amber-300">
+                {lang === 'hi' ? '2-मिनट हैकाथॉन डेमो गाइड (Hackathon Walkthrough)' : '2-Minute Hackathon Demo Walkthrough'}
+              </h2>
+            </div>
+            <button
+              onClick={() => setShowDemoGuide(false)}
+              className="text-xs text-slate-400 hover:text-white font-bold"
+            >
+              ✕ {lang === 'hi' ? 'छिपाएं' : 'Dismiss'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+            <button
+              onClick={() => setActiveScreen('voice')}
+              className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left transition flex items-start gap-2.5"
+            >
+              <div className="bg-amber-400 text-slate-950 p-2 rounded-xl font-black text-xs">1</div>
+              <div>
+                <div className="font-bold text-amber-300">Voice Assistant AI</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">Test speech recognition & 6 intents</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveScreen('facilities')}
+              className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left transition flex items-start gap-2.5"
+            >
+              <div className="bg-sky-400 text-slate-950 p-2 rounded-xl font-black text-xs">2</div>
+              <div>
+                <div className="font-bold text-sky-300">Facility Map</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">OpenStreetMap pins & slot booking</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveScreen('dashboard')}
+              className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left transition flex items-start gap-2.5"
+            >
+              <div className="bg-emerald-400 text-slate-950 p-2 rounded-xl font-black text-xs">3</div>
+              <div>
+                <div className="font-bold text-emerald-300">Provider Dashboard</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">Confirm, reject, & manage slots</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveScreen('phone')}
+              className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left transition flex items-start gap-2.5"
+            >
+              <div className="bg-purple-400 text-slate-950 p-2 rounded-xl font-black text-xs">4</div>
+              <div>
+                <div className="font-bold text-purple-300">Keypad Call Channel</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">Mock feature phone call & SMS</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveScreen('emergency')}
+              className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left transition flex items-start gap-2.5 sm:col-span-2"
+            >
+              <div className="bg-rose-400 text-slate-950 p-2 rounded-xl font-black text-xs">5</div>
+              <div>
+                <div className="font-bold text-rose-300">Emergency 108 Access</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">Non-diagnostic safety policy & 108 dialer</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid Actions */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

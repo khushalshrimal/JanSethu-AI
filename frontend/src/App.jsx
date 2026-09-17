@@ -11,6 +11,7 @@ import SlotSelectionScreen from './screens/SlotSelectionScreen';
 import ConfirmationScreen from './screens/ConfirmationScreen';
 import ProviderDashboardScreen from './screens/ProviderDashboardScreen';
 import EmergencyScreen from './screens/EmergencyScreen';
+import PhoneSimulatorScreen from './screens/PhoneSimulatorScreen';
 
 export default function App() {
   const [lang, setLang] = useState('hi'); // 'hi' or 'en'
@@ -86,6 +87,12 @@ export default function App() {
 
         {activeScreen === 'emergency' && (
           <EmergencyScreen
+            lang={lang}
+          />
+        )}
+
+        {activeScreen === 'phone' && (
+          <PhoneSimulatorScreen
             lang={lang}
           />
         )}

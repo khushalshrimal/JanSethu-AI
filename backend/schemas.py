@@ -9,6 +9,9 @@ class SlotBase(BaseModel):
     doctor_name: Optional[str] = None
     department: Optional[str] = None
 
+class SlotCreate(SlotBase):
+    facility_id: int
+
 class SlotResponse(SlotBase):
     id: int
     facility_id: int
@@ -45,6 +48,10 @@ class AppointmentCreate(BaseModel):
     patient_name: str
     phone: str
 
+class AppointmentReschedule(BaseModel):
+    new_date: str
+    new_time: str
+
 class AppointmentResponse(BaseModel):
     id: int
     facility_id: int
@@ -71,3 +78,37 @@ class EmergencyInfo(BaseModel):
     message: str
     message_hi: str
     contacts: List[EmergencyContact]
+
+class VoiceRequest(BaseModel):
+    transcript: str
+    lang: Optional[str] = "en"
+    context_location: Optional[str] = None
+    context_service: Optional[str] = None
+    context_date: Optional[str] = None
+
+class VoiceResponse(BaseModel):
+    intent: str
+    response_text: str
+    response_text_hi: Optional[str] = None
+    missing_field: Optional[str] = None
+    matched_facility_id: Optional[int] = None
+    facilities: Optional[List[FacilityResponse]] = []
+    slots: Optional[List[SlotResponse]] = []
+    action: Optional[str] = None
+
+class TelephonyCallPayload(BaseModel):
+    Caller: Optional[str] = "+91-9876543210"
+    CallSid: Optional[str] = "CALL_MOCK_1001"
+    Digits: Optional[str] = None
+    SpeechResult: Optional[str] = None
+    Language: Optional[str] = "hi"
+    Step: Optional[str] = "welcome"
+
+class TelephonyResponse(BaseModel):
+    call_sid: str
+    speech_text: str
+    speech_text_hi: Optional[str] = None
+    twiml_xml: str
+    sms_sent: bool = False
+    sms_body: Optional[str] = None
+    next_step: str

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Mic, Search, Building2, LayoutDashboard, PhoneCall } from 'lucide-react';
+import { Home, Mic, Search, Building2, LayoutDashboard, PhoneCall, Smartphone } from 'lucide-react';
 
 export default function Navigation({ activeScreen, setActiveScreen, lang }) {
   const navItems = [
@@ -10,14 +10,14 @@ export default function Navigation({ activeScreen, setActiveScreen, lang }) {
     },
     {
       id: 'voice',
-      label: lang === 'hi' ? 'आवाज सहायता' : 'Voice Assistant',
+      label: lang === 'hi' ? 'आवाज सहायक' : 'Voice Assistant',
       icon: Mic,
       highlight: true
     },
     {
-      id: 'search',
-      label: lang === 'hi' ? 'खोजें' : 'Search',
-      icon: Search,
+      id: 'phone',
+      label: lang === 'hi' ? 'कीपैड फोन' : 'Keypad Call',
+      icon: Smartphone,
     },
     {
       id: 'facilities',
@@ -66,7 +66,7 @@ export default function Navigation({ activeScreen, setActiveScreen, lang }) {
             <button
               key={item.id}
               onClick={() => setActiveScreen(item.id)}
-              className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition ${
+              className={`flex flex-col items-center justify-center py-1.5 px-1.5 rounded-xl transition ${
                 isActive
                   ? 'text-sky-700 font-bold bg-sky-50'
                   : item.emergency
