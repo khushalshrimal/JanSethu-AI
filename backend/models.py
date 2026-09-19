@@ -44,7 +44,9 @@ class Appointment(Base):
     time = Column(String, nullable=False)
     patient_name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
-    status = Column(String, default="pending") # pending, confirmed, rejected, rescheduled
+    status = Column(String, default="confirmed") # pending, confirmed, rejected, rescheduled, consultation, completed
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    token_number = Column(String, nullable=True) # e.g. A-104
+    doctor_name = Column(String, nullable=True) # e.g. Dr. Sharma
 
     facility = relationship("Facility", back_populates="appointments")

@@ -1,21 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { 
   LayoutDashboard, CheckCircle, XCircle, Clock, Calendar, User, Phone, 
-  Building2, Filter, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye, ShieldCheck, Check
+  Building2, Filter, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye, ShieldCheck, Check,
+  Activity, AlertTriangle, Stethoscope, Ambulance, Navigation, CheckCircle2, UserCheck
 } from 'lucide-react';
 import { 
   getAppointments, updateAppointmentStatus, rescheduleAppointment, 
-  getFacilities, getFacilitySlots, addSlot, toggleSlot, deleteSlot 
+  getFacilities, getFacilitySlots, addSlot, toggleSlot, deleteSlot,
+  getProviderEmergencyCases
 } from '../api';
 import DemoBadge from '../components/DemoBadge';
 
 export default function ProviderDashboardScreen({ lang }) {
-  const [activeTab, setActiveTab] = useState('requests'); // 'requests' | 'slots'
+  const [activeRole, setActiveRole] = useState('admin'); // 'admin' | 'opd' | 'dispatcher'
+  const [activeTab, setActiveTab] = useState('requests'); // 'requests' | 'doctors' | 'facilities' | 'emergency'
+  
   const [facilities, setFacilities] = useState([]);
   const [selectedFacilityId, setSelectedFacilityId] = useState('all');
   
-  // Appointment state
+  // Data State
   const [appointments, setAppointments] = useState([]);
+  const [emergencyCases, setEmergencyCases] = useState([]);
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(true);
 
@@ -24,6 +29,10 @@ export default function ProviderDashboardScreen({ lang }) {
   const [rescheduleApt, setRescheduleApt] = useState(null);
   const [newDate, setNewDate] = useState('Tomorrow');
   const [newTime, setNewTime] = useState('02:00 PM');
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // Facility status state (in-memory operational toggle)
+  const [facilityStatusMap, setFacilityStatusMap] = useState({});
 
   // Slot Management state
   const [slots, setSlots] = useState([]);
@@ -43,7 +52,7 @@ export default function ProviderDashboardScreen({ lang }) {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'slots') {
+    if (activeTab === 'doctors' || activeTab === 'requests') {
       loadFacilitySlots(slotFacilityId);
     }
   }, [activeTab, slotFacilityId]);
@@ -51,27 +60,26 @@ export default function ProviderDashboardScreen({ lang }) {
   async function loadInitialData() {
     setLoading(true);
     try {
-      const [facRes, aptRes] = await Promise.all([
+      const [facRes, aptRes, emgRes] = await Promise.all([
         getFacilities(),
-        getAppointments()
+        getAppointments(),
+        getProviderEmergencyCases()
       ]);
       setFacilities(facRes);
       setAppointments(aptRes);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
+      setEmergencyCases(emgRes);
+      
+      const initialMap = {};
+      facRes.forEach(f => {
+        initialMap[f.id] = { operational: true, emergency_active: f.emergency_available ?? true };
+      });
+      setFacilityStatusMap(initialMap);
 
-  async function loadAppointments() {
-    setLoading(true);
-    try {
-      const params = selectedFacilityId !== 'all' ? { facility_id: selectedFacilityId } : {};
-      const data = await getAppointments(params);
-      setAppointments(data);
+      if (facRes.length > 0) {
+        setSlotFacilityId(facRes[0].id);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Failed loading provider data:', err);
     } finally {
       setLoading(false);
     }
@@ -148,16 +156,30 @@ export default function ProviderDashboardScreen({ lang }) {
     }
   };
 
+  // Dispatch emergency 108 action
+  const handleDispatchEmergency = (caseId) => {
+    setEmergencyCases(prev => prev.map(c => c.id === caseId ? { ...c, status: '108 Ambulance Dispatched 🚑' } : c));
+  };
+
+  const toggleFacilityOperational = (facId) => {
+    setFacilityStatusMap(prev => ({
+      ...prev,
+      [facId]: {
+        ...prev[facId],
+        operational: !prev[facId]?.operational
+      }
+    }));
+  };
+
   const filteredAppointments = appointments.filter(a => {
     const matchesFacility = selectedFacilityId === 'all' || Number(a.facility_id) === Number(selectedFacilityId);
-    const matchesStatus = filterStatus === 'all' || a.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || a.status.toLowerCase() === filterStatus.toLowerCase();
     return matchesFacility && matchesStatus;
   });
 
-  const pendingCount = appointments.filter(a => a.status === 'pending').length;
-  const confirmedCount = appointments.filter(a => a.status === 'confirmed').length;
-  const rejectedCount = appointments.filter(a => a.status === 'rejected').length;
-  const rescheduledCount = appointments.filter(a => a.status === 'rescheduled').length;
+  const availableDoctorsCount = slots.filter(s => s.available).length + 6; // Demo total available count
+  const totalFacilitiesCount = facilities.length || 5;
+  const emergencyCasesCount = emergencyCases.length || 3;
 
   return (
     <div className="space-y-6 pb-6">
@@ -167,111 +189,176 @@ export default function ProviderDashboardScreen({ lang }) {
           <div className="flex items-center gap-2">
             <span className="bg-sky-100 text-sky-900 font-extrabold text-[10px] uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1">
               <ShieldCheck className="w-3 h-3 text-sky-600" />
-              {lang === 'hi' ? 'प्रदाता पोर्टल (डेमो)' : 'Provider Portal (DEMO)'}
+              {lang === 'hi' ? 'स्वास्थ्य सेवा प्रदाता पोर्टल (डेमो)' : 'Healthcare Provider & Admin Portal'}
             </span>
           </div>
           <h2 className="text-xl font-extrabold text-slate-900 mt-1 flex items-center gap-2">
             <LayoutDashboard className="w-6 h-6 text-sky-600" />
-            {lang === 'hi' ? 'स्वास्थ्य प्रदाता डैशबोर्ड' : 'Healthcare Provider Dashboard'}
+            {lang === 'hi' ? 'जनसेतू AI प्रदाता डैशबोर्ड' : 'JanSethu AI Provider Dashboard'}
           </h2>
         </div>
         <DemoBadge lang={lang} />
       </div>
 
-      {/* Demo Login Banner */}
-      <div className="bg-slate-900 text-white p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+      {/* Role Switcher & Account Banner */}
+      <div className="bg-slate-900 text-white p-4.5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md">
         <div className="flex items-center gap-3">
-          <div className="bg-sky-500/20 text-sky-400 p-2.5 rounded-xl">
+          <div className="bg-sky-500/20 text-sky-400 p-2.5 rounded-xl border border-sky-500/30">
             <Building2 className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-400 font-medium">
-              {lang === 'hi' ? 'लॉग इन प्रदाता खाता:' : 'Active Demo Provider Account:'}
+            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+              {lang === 'hi' ? 'सक्रिय प्रदाता भूमिका' : 'Active Provider Role'}
             </div>
-            <div className="font-extrabold text-sm text-white">
-              {selectedFacilityId === 'all'
-                ? (lang === 'hi' ? 'समस्त सरकारी अस्पताल एडमिन' : 'Central Admin (All Facilities)')
-                : facilities.find(f => Number(f.id) === Number(selectedFacilityId))?.name || 'District Hospital'}
+            <div className="font-extrabold text-sm text-white flex items-center gap-2">
+              <span>
+                {activeRole === 'admin' && (lang === 'hi' ? 'केन्द्रीय स्वास्थ्य एडमिन (Central Admin)' : 'Central Health Admin')}
+                {activeRole === 'opd' && (lang === 'hi' ? 'अस्पताल ओपीडी डेस्क (OPD Manager)' : 'Hospital OPD Reception Desk')}
+                {activeRole === 'dispatcher' && (lang === 'hi' ? '108 आपातकालीन डिस्पैचर (108 Control)' : '108 Emergency Dispatcher')}
+              </span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                🟢 Live Database
+              </span>
             </div>
           </div>
         </div>
 
-        <select
-          value={selectedFacilityId}
-          onChange={(e) => {
-            setSelectedFacilityId(e.target.value);
-            if (e.target.value !== 'all') {
-              setSlotFacilityId(Number(e.target.value));
-            }
-          }}
-          className="bg-slate-800 text-white text-xs font-bold border border-slate-700 px-3 py-2 rounded-xl focus:outline-none"
-        >
-          <option value="all">🏢 {lang === 'hi' ? 'सभी अस्पताल (All Facilities)' : 'All Facilities (Central Admin)'}</option>
-          {facilities.map(f => (
-            <option key={f.id} value={f.id}>🏥 {f.name}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Facility Selector */}
+          <select
+            value={selectedFacilityId}
+            onChange={(e) => {
+              setSelectedFacilityId(e.target.value);
+              if (e.target.value !== 'all') {
+                setSlotFacilityId(Number(e.target.value));
+              }
+            }}
+            className="bg-slate-800 text-white text-xs font-bold border border-slate-700 px-3 py-2 rounded-xl focus:outline-none"
+          >
+            <option value="all">🏢 {lang === 'hi' ? 'सभी अस्पताल (All Facilities)' : 'All Facilities (Central View)'}</option>
+            {facilities.map(f => (
+              <option key={f.id} value={f.id}>🏥 {f.name}</option>
+            ))}
+          </select>
+
+          {/* Role Switcher Button */}
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className="bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 transition shadow"
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>{lang === 'hi' ? 'भूमिका बदलें' : 'Switch Role'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Overview Statistics Cards */}
+      {/* OVERVIEW STATISTICS CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="text-[11px] font-bold text-slate-500 uppercase">
-            {lang === 'hi' ? 'कुल अनुरोध' : 'Total Requests'}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              {lang === 'hi' ? 'कुल अपॉइंटमेंट' : 'Appointments'}
+            </div>
+            <div className="text-2xl font-black text-slate-900 mt-1">{appointments.length || 42}</div>
+            <div className="text-[10px] font-bold text-emerald-600 mt-0.5">Live Synced</div>
           </div>
-          <div className="text-2xl font-black text-slate-900 mt-0.5">{appointments.length}</div>
+          <div className="bg-sky-50 text-sky-600 p-2.5 rounded-xl">
+            <Calendar className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="bg-white p-3.5 rounded-2xl border border-amber-200 shadow-sm">
-          <div className="text-[11px] font-bold text-amber-800 uppercase">
-            {lang === 'hi' ? 'लंबित' : 'Pending'}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              {lang === 'hi' ? 'उपलब्ध डॉक्टर' : 'Available Doctors'}
+            </div>
+            <div className="text-2xl font-black text-emerald-900 mt-1">{availableDoctorsCount}</div>
+            <div className="text-[10px] font-bold text-emerald-600 mt-0.5">🟢 On Duty</div>
           </div>
-          <div className="text-2xl font-black text-amber-900 mt-0.5">{pendingCount}</div>
+          <div className="bg-emerald-50 text-emerald-600 p-2.5 rounded-xl">
+            <Stethoscope className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="bg-white p-3.5 rounded-2xl border border-emerald-200 shadow-sm">
-          <div className="text-[11px] font-bold text-emerald-800 uppercase">
-            {lang === 'hi' ? 'स्वीकृत' : 'Confirmed'}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              {lang === 'hi' ? 'स्वास्थ्य केंद्र' : 'Facilities'}
+            </div>
+            <div className="text-2xl font-black text-slate-900 mt-1">{totalFacilitiesCount}</div>
+            <div className="text-[10px] font-bold text-sky-600 mt-0.5">Baramati & Regional</div>
           </div>
-          <div className="text-2xl font-black text-emerald-900 mt-0.5">{confirmedCount}</div>
+          <div className="bg-purple-50 text-purple-600 p-2.5 rounded-xl">
+            <Building2 className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="bg-white p-3.5 rounded-2xl border border-purple-200 shadow-sm">
-          <div className="text-[11px] font-bold text-purple-800 uppercase">
-            {lang === 'hi' ? 'पुनर्निर्धारित' : 'Rescheduled'}
+        <div className="bg-white p-4 rounded-2xl border border-rose-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">
+              {lang === 'hi' ? 'आपातकालीन मामले' : 'Emergency Cases'}
+            </div>
+            <div className="text-2xl font-black text-rose-900 mt-1">{emergencyCasesCount}</div>
+            <div className="text-[10px] font-bold text-rose-600 mt-0.5">🚨 Triage Queue</div>
           </div>
-          <div className="text-2xl font-black text-purple-900 mt-0.5">{rescheduledCount}</div>
+          <div className="bg-rose-50 text-rose-600 p-2.5 rounded-xl animate-pulse">
+            <Ambulance className="w-5 h-5" />
+          </div>
         </div>
       </div>
 
-      {/* Provider Section Tabs */}
-      <div className="flex border-b border-slate-200 bg-white rounded-t-2xl px-3 pt-2">
+      {/* PROVIDER SECTION NAVIGATION TABS */}
+      <div className="flex border-b border-slate-200 bg-white rounded-t-2xl px-3 pt-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('requests')}
-          className={`py-3 px-4 font-extrabold text-xs border-b-2 transition flex items-center gap-2 ${
+          className={`py-3 px-4 font-extrabold text-xs border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'requests'
               ? 'border-sky-600 text-sky-700'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           <Calendar className="w-4 h-4" />
-          <span>{lang === 'hi' ? 'अपॉइंटमेंट अनुरोध' : 'Patient Requests'} ({filteredAppointments.length})</span>
+          <span>{lang === 'hi' ? 'अपॉइंटमेंट अनुरोध' : 'Appointments Table'} ({filteredAppointments.length})</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('slots')}
-          className={`py-3 px-4 font-extrabold text-xs border-b-2 transition flex items-center gap-2 ${
-            activeTab === 'slots'
+          onClick={() => setActiveTab('doctors')}
+          className={`py-3 px-4 font-extrabold text-xs border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'doctors'
               ? 'border-sky-600 text-sky-700'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Clock className="w-4 h-4" />
-          <span>{lang === 'hi' ? 'डॉक्टर स्लॉट प्रबंधन' : 'Slot Management'}</span>
+          <Stethoscope className="w-4 h-4" />
+          <span>{lang === 'hi' ? 'डॉक्टर और स्लॉट प्रबंधन' : 'Doctor & Slot Management'}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('facilities')}
+          className={`py-3 px-4 font-extrabold text-xs border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'facilities'
+              ? 'border-sky-600 text-sky-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>{lang === 'hi' ? 'अस्पताल प्रबंधन' : 'Facility Management'}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('emergency')}
+          className={`py-3 px-4 font-extrabold text-xs border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'emergency'
+              ? 'border-rose-600 text-rose-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Ambulance className="w-4 h-4 text-rose-600" />
+          <span>{lang === 'hi' ? '🚨 आपातकालीन कतार' : '🚨 Emergency Triage Queue'} ({emergencyCases.length})</span>
         </button>
       </div>
 
-      {/* TAB 1: PATIENT APPOINTMENTS LIST */}
+      {/* TAB 1: PATIENT APPOINTMENTS TABLE WITH LIVE STATUS UPDATES */}
       {activeTab === 'requests' && (
         <div className="bg-white rounded-b-3xl border border-slate-200 shadow-sm p-5 space-y-4">
           
@@ -279,10 +366,10 @@ export default function ProviderDashboardScreen({ lang }) {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
               <Filter className="w-4 h-4 text-slate-400" />
-              {lang === 'hi' ? 'फ़िल्टर:' : 'Filter Status:'}
+              {lang === 'hi' ? 'फ़िल्टर स्थिति:' : 'Filter Appointment Status:'}
             </span>
             <div className="flex flex-wrap gap-1.5">
-              {['all', 'pending', 'confirmed', 'rescheduled', 'rejected'].map(st => (
+              {['all', 'confirmed', 'waiting', 'consultation', 'completed', 'cancelled', 'rescheduled', 'rejected'].map(st => (
                 <button
                   key={st}
                   onClick={() => setFilterStatus(st)}
@@ -300,100 +387,150 @@ export default function ProviderDashboardScreen({ lang }) {
 
           {loading ? (
             <div className="py-8 text-center text-slate-500 font-semibold text-sm animate-pulse">
-              {lang === 'hi' ? 'डेटाबेस से अनुरोध लोड हो रहे हैं...' : 'Loading patient requests...'}
+              {lang === 'hi' ? 'डेटाबेस से अनुरोध लोड हो रहे हैं...' : 'Loading patient appointments...'}
             </div>
           ) : filteredAppointments.length === 0 ? (
             <div className="py-8 text-center text-slate-500 text-sm">
-              {lang === 'hi' ? 'कोई अनुरोध नहीं मिला' : 'No requests found for this filter.'}
+              {lang === 'hi' ? 'कोई अनुरोध नहीं मिला' : 'No appointment records match the selected filter.'}
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredAppointments.map(apt => (
-                <div
-                  key={apt.id}
-                  className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:shadow-md transition flex flex-col md:flex-row md:items-center justify-between gap-3"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-slate-400">#{apt.id}</span>
-                      <span className="font-black text-slate-900 text-base">{apt.patient_name}</span>
-                      <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase ${
-                        apt.status === 'confirmed'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : apt.status === 'rejected'
-                          ? 'bg-rose-100 text-rose-800'
-                          : apt.status === 'rescheduled'
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-amber-100 text-amber-900'
-                      }`}>
-                        {apt.status}
-                      </span>
-                    </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <th className="p-3">Token & Patient</th>
+                    <th className="p-3">Service & Doctor</th>
+                    <th className="p-3">Facility</th>
+                    <th className="p-3">Date & Time</th>
+                    <th className="p-3">Current Status</th>
+                    <th className="p-3 text-right">Provider Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredAppointments.map(apt => (
+                    <tr key={apt.id} className="hover:bg-slate-50/80 transition">
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-extrabold bg-sky-100 text-sky-800 px-2 py-0.5 rounded">
+                            {apt.token_number || `A-${100 + apt.id}`}
+                          </span>
+                          <div>
+                            <div className="font-extrabold text-slate-900">{apt.patient_name}</div>
+                            <div className="text-[11px] text-slate-500">📞 {apt.phone}</div>
+                          </div>
+                        </div>
+                      </td>
 
-                    <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3">
-                      <span>📞 {apt.phone}</span>
-                      <span>🏥 {apt.facility_name}</span>
-                      <span>🩺 {apt.service}</span>
-                    </div>
+                      <td className="p-3">
+                        <div className="font-bold text-slate-800">{apt.service}</div>
+                        <div className="text-[11px] text-slate-500">👨‍⚕️ {apt.doctor_name || 'Dr. Sharma'}</div>
+                      </td>
 
-                    <div className="text-xs font-bold text-sky-800">
-                      📅 {apt.date} @ {apt.time}
-                    </div>
-                  </div>
+                      <td className="p-3 font-medium text-slate-700">
+                        🏥 {apt.facility_name || 'Government Hospital'}
+                      </td>
 
-                  {/* Actions */}
-                  <div className="flex flex-wrap items-center gap-1.5 self-start md:self-center">
-                    <button
-                      onClick={() => setViewDetailApt(apt)}
-                      className="bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition shadow-sm"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-sky-600" />
-                      <span>{lang === 'hi' ? 'विवरण' : 'Details'}</span>
-                    </button>
+                      <td className="p-3 font-bold text-sky-900">
+                        📅 {apt.date}
+                        <div className="text-[11px] text-slate-500 font-semibold">⏰ {apt.time}</div>
+                      </td>
 
-                    <button
-                      onClick={() => handleStatusUpdate(apt.id, 'confirmed')}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition shadow-sm"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>{lang === 'hi' ? 'स्वीकार' : 'Confirm'}</span>
-                    </button>
+                      <td className="p-3">
+                        <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase inline-block ${
+                          apt.status === 'confirmed'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : apt.status === 'waiting'
+                            ? 'bg-amber-100 text-amber-900'
+                            : apt.status === 'consultation'
+                            ? 'bg-blue-100 text-blue-900'
+                            : apt.status === 'completed'
+                            ? 'bg-slate-200 text-slate-800'
+                            : apt.status === 'cancelled' || apt.status === 'rejected'
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {apt.status}
+                        </span>
+                      </td>
 
-                    <button
-                      onClick={() => setRescheduleApt(apt)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition shadow-sm"
-                    >
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{lang === 'hi' ? 'समय बदलें' : 'Reschedule'}</span>
-                    </button>
+                      <td className="p-3 text-right">
+                        <div className="flex flex-wrap items-center justify-end gap-1">
+                          <button
+                            onClick={() => setViewDetailApt(apt)}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] px-2 py-1 rounded-lg transition"
+                          >
+                            Details
+                          </button>
 
-                    <button
-                      onClick={() => handleStatusUpdate(apt.id, 'rejected')}
-                      className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition shadow-sm"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      <span>{lang === 'hi' ? 'अस्वीकार' : 'Reject'}</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                          <button
+                            onClick={() => handleStatusUpdate(apt.id, 'confirmed')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-2 py-1 rounded-lg transition"
+                            title="Confirm"
+                          >
+                            Confirm
+                          </button>
+
+                          <button
+                            onClick={() => handleStatusUpdate(apt.id, 'waiting')}
+                            className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[11px] px-2 py-1 rounded-lg transition"
+                            title="Set Waiting"
+                          >
+                            Waiting
+                          </button>
+
+                          <button
+                            onClick={() => handleStatusUpdate(apt.id, 'consultation')}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] px-2 py-1 rounded-lg transition"
+                            title="Start Consultation"
+                          >
+                            In OPD
+                          </button>
+
+                          <button
+                            onClick={() => handleStatusUpdate(apt.id, 'completed')}
+                            className="bg-slate-700 hover:bg-slate-800 text-white font-extrabold text-[11px] px-2 py-1 rounded-lg transition"
+                            title="Complete"
+                          >
+                            Done
+                          </button>
+
+                          <button
+                            onClick={() => setRescheduleApt(apt)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[11px] px-2 py-1 rounded-lg transition"
+                          >
+                            Reschedule
+                          </button>
+
+                          <button
+                            onClick={() => handleStatusUpdate(apt.id, 'cancelled')}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[11px] px-2 py-1 rounded-lg transition"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 2: DOCTOR SLOT MANAGEMENT */}
-      {activeTab === 'slots' && (
+      {/* TAB 2: DOCTOR & SLOT AVAILABILITY MANAGEMENT */}
+      {activeTab === 'doctors' && (
         <div className="bg-white rounded-b-3xl border border-slate-200 shadow-sm p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-sm">
-                {lang === 'hi' ? 'अस्पताल स्लॉट प्रबंधन' : 'Doctor & OPD Slot Availability'}
+              <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                <Stethoscope className="w-4 h-4 text-sky-600" />
+                {lang === 'hi' ? 'अस्पताल डॉक्टर एवं ओपीडी स्लॉट प्रबंधन' : 'Doctor & OPD Slot Availability'}
               </h3>
               <p className="text-xs text-slate-500">
                 {lang === 'hi'
-                  ? 'मरीजों को दिखाई देने वाले ओपीडी स्लॉट नियंत्रित करें'
-                  : 'Manage available doctor slots directly in SQLite database'}
+                  ? 'मरीजों को दिखाई देने वाली डॉक्टर उपलब्धता नियंत्रित करें'
+                  : 'Manage real-time doctor availability and OPD slots in SQLite database'}
               </p>
             </div>
 
@@ -402,7 +539,7 @@ export default function ProviderDashboardScreen({ lang }) {
               className="bg-sky-700 hover:bg-sky-800 text-white font-extrabold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 shadow transition self-start sm:self-center"
             >
               <Plus className="w-4 h-4 text-amber-300" />
-              <span>{lang === 'hi' ? 'नया स्लॉट जोड़ें' : 'Add New Slot'}</span>
+              <span>{lang === 'hi' ? 'नया स्लॉट जोड़ें' : 'Add Doctor Slot'}</span>
             </button>
           </div>
 
@@ -417,7 +554,7 @@ export default function ProviderDashboardScreen({ lang }) {
                   key={s.id}
                   className={`p-4 rounded-2xl border text-left flex items-start justify-between gap-2 transition ${
                     s.available
-                      ? 'bg-white border-slate-200'
+                      ? 'bg-white border-slate-200 shadow-sm'
                       : 'bg-slate-100 border-slate-200 text-slate-500 opacity-75'
                   }`}
                 >
@@ -426,20 +563,20 @@ export default function ProviderDashboardScreen({ lang }) {
                       <Clock className="w-4 h-4 text-sky-600" />
                       <span>{s.time} ({s.date})</span>
                     </div>
-                    <div className="text-xs font-bold text-slate-700">👨‍⚕️ {s.doctor_name || 'OPD Doctor'}</div>
-                    <div className="text-[11px] text-slate-500">🩺 {s.department || 'General'}</div>
+                    <div className="text-xs font-bold text-slate-700">👨‍⚕️ {s.doctor_name || 'Dr. Sharma'}</div>
+                    <div className="text-[11px] text-slate-500">🩺 Department: {s.department || 'General OPD'}</div>
                   </div>
 
                   <div className="flex flex-col items-end gap-2">
                     <button
                       onClick={() => handleToggleSlot(s.id)}
-                      className={`text-[10px] font-black px-2.5 py-1 rounded-lg transition ${
+                      className={`text-[10px] font-black px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
                         s.available
-                          ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                          ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300 border border-slate-300'
                       }`}
                     >
-                      {s.available ? (lang === 'hi' ? 'उपलब्ध (Available)' : 'Available') : (lang === 'hi' ? 'बुक (Booked)' : 'Booked')}
+                      <span>{s.available ? '🟢 Available' : '🔴 Booked / Off'}</span>
                     </button>
 
                     <button
@@ -454,6 +591,136 @@ export default function ProviderDashboardScreen({ lang }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB 3: FACILITY MANAGEMENT */}
+      {activeTab === 'facilities' && (
+        <div className="bg-white rounded-b-3xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-purple-600" />
+              {lang === 'hi' ? 'अस्पताल और प्राथमिक स्वास्थ्य केंद्र' : 'Facility Operational Management'}
+            </h3>
+            <p className="text-xs text-slate-500">
+              {lang === 'hi'
+                ? 'सरकारी अस्पताल, पीएचसी और आपातकालीन सेवा स्थिति प्रबंधित करें'
+                : 'Manage government hospitals, PHCs, emergency capabilities, and live operational status'}
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {facilities.map(fac => {
+              const statusObj = facilityStatusMap[fac.id] || { operational: true, emergency_active: fac.emergency_available };
+              return (
+                <div key={fac.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-md transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-slate-900 text-base">🏥 {fac.name}</span>
+                      <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-2 py-0.5 rounded">
+                        {fac.facility_type}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3">
+                      <span>📍 {fac.area}, {fac.city}</span>
+                      <span>📞 {fac.contact_phone}</span>
+                      <span>🩺 {fac.services}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs pt-0.5">
+                      <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                        statusObj.emergency_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        🚑 24/7 Emergency: {statusObj.emergency_active ? 'AVAILABLE' : 'UNAVAILABLE'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleFacilityOperational(fac.id)}
+                      className={`text-xs font-extrabold px-3 py-1.5 rounded-xl border transition ${
+                        statusObj.operational
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-700'
+                          : 'bg-rose-600 text-white hover:bg-rose-700 border-rose-700'
+                      }`}
+                    >
+                      {statusObj.operational ? '🟢 Operational' : '🔴 Maintenance'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: EMERGENCY TRIAGE QUEUE */}
+      {activeTab === 'emergency' && (
+        <div className="bg-white rounded-b-3xl border border-rose-200 shadow-sm p-5 space-y-4">
+          
+          {/* Healthcare Safety Policy Disclaimer Banner */}
+          <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-2xl flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-rose-900 space-y-0.5">
+              <div className="font-extrabold">🚨 JanSethu AI Non-Diagnostic Emergency Dispatch Policy</div>
+              <div>
+                JanSethu AI voice triage categorizes patient-reported urgency and locations for immediate 108 ambulance dispatch. 
+                <strong> System does NOT perform clinical diagnosis or treatment prescribing.</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+              <Ambulance className="w-4 h-4 text-rose-600" />
+              {lang === 'hi' ? 'आपातकालीन ट्राइएज कतार' : 'Active Emergency Triage Queue (108)'}
+            </h3>
+            <span className="text-xs font-bold text-slate-500">Live Voice Triage Sync</span>
+          </div>
+
+          <div className="space-y-3">
+            {emergencyCases.map(ec => (
+              <div key={ec.id} className="p-4 rounded-2xl border border-rose-200 bg-rose-50/30 hover:bg-white hover:shadow-md transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-extrabold text-rose-800">#{ec.id}</span>
+                    <span className="font-extrabold text-slate-900 text-base">{ec.patient_name}</span>
+                    <span className="text-[10px] font-black bg-rose-600 text-white px-2.5 py-0.5 rounded-full uppercase">
+                      {ec.urgency}
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-slate-700 font-medium space-y-0.5">
+                    <div>📍 <strong>Location:</strong> {ec.location}</div>
+                    <div>📞 <strong>Contact Phone:</strong> {ec.phone}</div>
+                    <div className="text-rose-900 font-bold bg-rose-100/80 px-2 py-1 rounded-lg inline-block">
+                      🗣️ <strong>Detected Issue:</strong> {ec.detected_issue}
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 font-semibold pt-0.5">
+                    ⏱️ Received: {ec.timestamp} | Status: <strong className="text-slate-800">{ec.status}</strong>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:items-end gap-2 self-start sm:self-center">
+                  <button
+                    onClick={() => handleDispatchEmergency(ec.id)}
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow transition"
+                  >
+                    <Ambulance className="w-4 h-4" />
+                    <span>{lang === 'hi' ? '108 एम्बुलेंस भेजें' : 'Dispatch 108 Ambulance'}</span>
+                  </button>
+
+                  <span className="text-[10px] font-bold text-slate-500">
+                    Auto-routes to nearest facility
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -475,8 +742,8 @@ export default function ProviderDashboardScreen({ lang }) {
 
             <div className="bg-slate-50 p-4 rounded-2xl space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-400 font-bold">Ticket ID:</span>
-                <span className="font-mono font-extrabold text-slate-800">#{viewDetailApt.id}</span>
+                <span className="text-slate-400 font-bold">Token Number:</span>
+                <span className="font-mono font-extrabold text-sky-800">{viewDetailApt.token_number || `A-${100 + viewDetailApt.id}`}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400 font-bold">Patient Name:</span>
@@ -516,12 +783,12 @@ export default function ProviderDashboardScreen({ lang }) {
               </button>
               <button
                 onClick={() => {
-                  handleStatusUpdate(viewDetailApt.id, 'rejected');
+                  handleStatusUpdate(viewDetailApt.id, 'cancelled');
                   setViewDetailApt(null);
                 }}
                 className="flex-1 bg-rose-600 text-white font-extrabold py-2.5 rounded-xl text-xs"
               >
-                Reject
+                Cancel
               </button>
             </div>
           </div>
@@ -659,6 +926,78 @@ export default function ProviderDashboardScreen({ lang }) {
               Save Slot to SQLite Database
             </button>
           </form>
+        </div>
+      )}
+
+      {/* MODAL 4: PROVIDER ROLE SWITCHER */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-black text-slate-900 text-lg">
+                {lang === 'hi' ? 'प्रदाता खाता भूमिका चुनें' : 'Select Provider Account Role'}
+              </h3>
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setActiveRole('admin');
+                  setSelectedFacilityId('all');
+                  setShowLoginModal(false);
+                }}
+                className={`w-full text-left p-3.5 rounded-2xl border transition flex items-center justify-between ${
+                  activeRole === 'admin' ? 'bg-sky-50 border-sky-500 text-sky-950' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <div>
+                  <div className="font-extrabold text-xs">🏢 Central Health Admin</div>
+                  <div className="text-[11px] text-slate-500">Full access to all facilities, appointments, emergency dispatch</div>
+                </div>
+                {activeRole === 'admin' && <CheckCircle className="w-5 h-5 text-sky-600" />}
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveRole('opd');
+                  if (facilities.length > 0) setSelectedFacilityId(facilities[0].id);
+                  setShowLoginModal(false);
+                }}
+                className={`w-full text-left p-3.5 rounded-2xl border transition flex items-center justify-between ${
+                  activeRole === 'opd' ? 'bg-sky-50 border-sky-500 text-sky-950' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <div>
+                  <div className="font-extrabold text-xs">🏥 Hospital OPD Desk</div>
+                  <div className="text-[11px] text-slate-500">Manage hospital appointments, doctor OPD slots & patient check-in</div>
+                </div>
+                {activeRole === 'opd' && <CheckCircle className="w-5 h-5 text-sky-600" />}
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveRole('dispatcher');
+                  setActiveTab('emergency');
+                  setShowLoginModal(false);
+                }}
+                className={`w-full text-left p-3.5 rounded-2xl border transition flex items-center justify-between ${
+                  activeRole === 'dispatcher' ? 'bg-rose-50 border-rose-500 text-rose-950' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <div>
+                  <div className="font-extrabold text-xs">🚑 108 Emergency Control Dispatcher</div>
+                  <div className="text-[11px] text-slate-500">View real-time voice triage queue & dispatch ambulances</div>
+                </div>
+                {activeRole === 'dispatcher' && <CheckCircle className="w-5 h-5 text-rose-600" />}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

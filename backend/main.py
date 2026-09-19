@@ -114,9 +114,12 @@ def read_facilities(
     area: Optional[str] = None,
     service: Optional[str] = None,
     search: Optional[str] = None,
+    is_emergency: bool = False,
     db: Session = Depends(get_db)
 ):
-    facilities = crud.get_facilities(db, city=city, area=area, service=service, search=search)
+    facilities = crud.get_smart_routed_facilities(
+        db, city=city, area=area, service=service, search=search, is_emergency=is_emergency
+    )
     return facilities
 
 @app.get("/emergency/facilities", response_model=List[schemas.FacilityResponse])
@@ -197,9 +200,10 @@ def create_new_appointment(
 def read_appointments(
     facility_id: Optional[int] = None,
     status: Optional[str] = None,
+    phone: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    apts = crud.get_appointments(db, facility_id=facility_id, status=status)
+    apts = crud.get_appointments(db, facility_id=facility_id, status=status, phone=phone)
     result = []
     for apt in apts:
         fac = crud.get_facility(db, apt.facility_id)
@@ -223,10 +227,10 @@ def read_appointment(appointment_id: int, db: Session = Depends(get_db)):
 @app.patch("/api/appointments/{appointment_id}/status")
 def update_appointment_status(
     appointment_id: int,
-    status: str = Query(..., pattern="^(pending|confirmed|rejected|rescheduled)$"),
+    status: str = Query(..., pattern="(?i)^(pending|confirmed|waiting|consultation|completed|cancelled|rejected|rescheduled)$"),
     db: Session = Depends(get_db)
 ):
-    updated = crud.update_appointment_status(db, appointment_id, status)
+    updated = crud.update_appointment_status(db, appointment_id, status.lower())
     if not updated:
         raise HTTPException(status_code=404, detail=f"Appointment with ID {appointment_id} not found")
     return {"message": "Status updated successfully", "id": updated.id, "status": updated.status}
@@ -245,6 +249,42 @@ def reschedule_patient_appointment(
     response = schemas.AppointmentResponse.from_orm(rescheduled)
     response.facility_name = fac.name if fac else "Unknown Facility"
     return response
+
+@app.get("/provider/emergency_cases", response_model=List[schemas.EmergencyCaseResponse])
+@app.get("/api/provider/emergency_cases", response_model=List[schemas.EmergencyCaseResponse])
+def get_provider_emergency_cases(db: Session = Depends(get_db)):
+    return [
+        {
+            "id": 101,
+            "patient_name": "Ramesh Pawar",
+            "phone": "+91-9876543210",
+            "location": "Baramati Rural (Ward 4)",
+            "detected_issue": "Acute Chest Tightness & Breathlessness (Voice Triage)",
+            "urgency": "CRITICAL 🚨",
+            "status": "Dispatch Requested",
+            "timestamp": "10 mins ago"
+        },
+        {
+            "id": 102,
+            "patient_name": "Sunita Kamble",
+            "phone": "+91-9822114455",
+            "location": "Sanganer Sub-centre",
+            "detected_issue": "Severe Pediatric Dehydration & Fever",
+            "urgency": "HIGH ⚠️",
+            "status": "Under Evaluation",
+            "timestamp": "25 mins ago"
+        },
+        {
+            "id": 103,
+            "patient_name": "Anil Deshmukh",
+            "phone": "+91-9765432109",
+            "location": "Indapur PHC Road",
+            "detected_issue": "Trauma / Accidental Leg Injury",
+            "urgency": "MEDIUM",
+            "status": "108 Notified",
+            "timestamp": "42 mins ago"
+        }
+    ]
 
 @app.get("/emergency", response_model=schemas.EmergencyInfo)
 @app.get("/api/emergency", response_model=schemas.EmergencyInfo)
@@ -276,3 +316,4 @@ def get_emergency_info():
             )
         ]
     )
+

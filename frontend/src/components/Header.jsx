@@ -24,14 +24,18 @@ export default function Header({ lang, setLang }) {
 
         {/* Language selector toggle */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setLang(lang === 'hi' ? 'en' : 'hi')}
-            className="flex items-center gap-1.5 bg-sky-800 hover:bg-sky-900 border border-sky-400/30 px-3 py-2 rounded-xl text-sm font-semibold transition active:scale-95 shadow-sm"
-            aria-label="Toggle Language"
-          >
+          <div className="flex items-center gap-1.5 bg-sky-800 border border-sky-400/30 px-2.5 py-1.5 rounded-xl text-xs font-semibold shadow-sm">
             <Globe className="w-4 h-4 text-amber-300" />
-            <span>{lang === 'hi' ? 'English' : 'हिंदी'}</span>
-          </button>
+            <select
+              value={lang}
+              onChange={(e) => setLang(e.target.value)}
+              className="bg-transparent text-white font-bold outline-none cursor-pointer"
+            >
+              <option value="hi" className="bg-slate-900 text-white">हिंदी</option>
+              <option value="mr" className="bg-slate-900 text-white">मराठी</option>
+              <option value="en" className="bg-slate-900 text-white">English</option>
+            </select>
+          </div>
         </div>
       </div>
     </header>

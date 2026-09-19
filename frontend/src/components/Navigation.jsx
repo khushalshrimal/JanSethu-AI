@@ -1,37 +1,37 @@
 import React from 'react';
-import { Home, Mic, Search, Building2, LayoutDashboard, PhoneCall, Smartphone } from 'lucide-react';
+import { Home, Mic, Search, Building2, LayoutDashboard, PhoneCall, Smartphone, Ticket } from 'lucide-react';
 
 export default function Navigation({ activeScreen, setActiveScreen, lang }) {
   const navItems = [
     {
       id: 'home',
-      label: lang === 'hi' ? 'होम' : 'Home',
+      label: lang === 'hi' ? 'होम' : lang === 'mr' ? 'होम' : 'Home',
       icon: Home,
     },
     {
       id: 'voice',
-      label: lang === 'hi' ? 'आवाज सहायक' : 'Voice Assistant',
+      label: lang === 'hi' ? 'आवाज सहायक' : lang === 'mr' ? 'व्हॉइस सहाय्यक' : 'Voice Assistant',
       icon: Mic,
       highlight: true
     },
     {
       id: 'phone',
-      label: lang === 'hi' ? 'कीपैड फोन' : 'Keypad Call',
+      label: lang === 'hi' ? 'कीपैड फोन' : lang === 'mr' ? 'कीपॅड फोन' : 'Keypad Call',
       icon: Smartphone,
     },
     {
-      id: 'facilities',
-      label: lang === 'hi' ? 'अस्पताल' : 'Facilities',
-      icon: Building2,
+      id: 'track',
+      label: lang === 'hi' ? 'ट्रैक' : lang === 'mr' ? 'ट्रॅक' : 'Track',
+      icon: Ticket,
     },
     {
       id: 'dashboard',
-      label: lang === 'hi' ? 'डैशबोर्ड' : 'Dashboard',
+      label: lang === 'hi' ? 'डैशबोर्ड' : lang === 'mr' ? 'डॅशबोर्ड' : 'Dashboard',
       icon: LayoutDashboard,
     },
     {
       id: 'emergency',
-      label: lang === 'hi' ? 'आपातकाल' : 'Emergency',
+      label: lang === 'hi' ? 'आपातकाल' : lang === 'mr' ? 'आणीबाणी' : 'Emergency',
       icon: PhoneCall,
       emergency: true
     }

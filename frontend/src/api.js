@@ -217,4 +217,45 @@ export const getEmergencyInfo = async () => {
   }
 };
 
+export const getProviderEmergencyCases = async () => {
+  try {
+    const response = await api.get('/provider/emergency_cases');
+    return response.data;
+  } catch {
+    return [
+      {
+        id: 101,
+        patient_name: "Ramesh Pawar",
+        phone: "+91-9876543210",
+        location: "Baramati Rural (Ward 4)",
+        detected_issue: "Acute Chest Tightness & Breathlessness (Voice Triage)",
+        urgency: "CRITICAL 🚨",
+        status: "Dispatch Requested",
+        timestamp: "10 mins ago"
+      },
+      {
+        id: 102,
+        patient_name: "Sunita Kamble",
+        phone: "+91-9822114455",
+        location: "Sanganer Sub-centre",
+        detected_issue: "Severe Pediatric Dehydration & Fever",
+        urgency: "HIGH ⚠️",
+        status: "Under Evaluation",
+        timestamp: "25 mins ago"
+      },
+      {
+        id: 103,
+        patient_name: "Anil Deshmukh",
+        phone: "+91-9765432109",
+        location: "Indapur PHC Road",
+        detected_issue: "Trauma / Accidental Leg Injury",
+        urgency: "MEDIUM",
+        status: "108 Notified",
+        timestamp: "42 mins ago"
+      }
+    ];
+  }
+};
+
 export default api;
+

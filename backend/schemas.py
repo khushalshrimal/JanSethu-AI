@@ -33,6 +33,11 @@ class FacilityBase(BaseModel):
 
 class FacilityResponse(FacilityBase):
     id: int
+    simulated_distance: Optional[float] = 4.2
+    doctor_available: Optional[bool] = True
+    emergency_available: Optional[bool] = True
+    smart_score: Optional[float] = 85.0
+    next_opd_slot: Optional[str] = "10:30 AM"
 
     class Config:
         from_attributes = True
@@ -47,6 +52,8 @@ class AppointmentCreate(BaseModel):
     time: str
     patient_name: str
     phone: str
+    doctor_name: Optional[str] = "Dr. Sharma"
+    token_number: Optional[str] = None
 
 class AppointmentReschedule(BaseModel):
     new_date: str
@@ -63,6 +70,8 @@ class AppointmentResponse(BaseModel):
     status: str
     created_at: datetime
     facility_name: Optional[str] = None
+    token_number: Optional[str] = "A-104"
+    doctor_name: Optional[str] = "Dr. Sharma"
 
     class Config:
         from_attributes = True
@@ -90,11 +99,18 @@ class VoiceResponse(BaseModel):
     intent: str
     response_text: str
     response_text_hi: Optional[str] = None
+    response_text_mr: Optional[str] = None
     missing_field: Optional[str] = None
     matched_facility_id: Optional[int] = None
     facilities: Optional[List[FacilityResponse]] = []
     slots: Optional[List[SlotResponse]] = []
     action: Optional[str] = None
+    symptoms: Optional[str] = None
+    duration: Optional[str] = None
+    location: Optional[str] = None
+    urgency: Optional[str] = "Low"
+    next_action: Optional[str] = "Information Routing"
+    is_emergency: bool = False
 
 class TelephonyCallPayload(BaseModel):
     Caller: Optional[str] = "+91-9876543210"
@@ -108,7 +124,25 @@ class TelephonyResponse(BaseModel):
     call_sid: str
     speech_text: str
     speech_text_hi: Optional[str] = None
+    speech_text_mr: Optional[str] = None
     twiml_xml: str
     sms_sent: bool = False
     sms_body: Optional[str] = None
     next_step: str
+    symptoms: Optional[str] = None
+    duration: Optional[str] = None
+    location: Optional[str] = None
+    urgency: Optional[str] = "Low"
+    next_action: Optional[str] = "Information Routing"
+    is_emergency: bool = False
+
+class EmergencyCaseResponse(BaseModel):
+    id: int
+    patient_name: str
+    phone: str
+    location: str
+    detected_issue: str
+    urgency: str
+    status: str
+    timestamp: str
+

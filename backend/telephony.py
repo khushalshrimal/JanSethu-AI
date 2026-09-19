@@ -47,85 +47,123 @@ def handle_telephony_call(payload: schemas.TelephonyCallPayload, db: Session) ->
 
     # STEP 1: INITIAL INCOMING CALL WELCOME
     if step == "welcome" and not digits and not speech:
-        welcome_en = "Welcome to JanSethu AI Healthcare Access. Press 1 for Hindi, Press 2 for English, or speak your request after the tone."
-        welcome_hi = "जनसेतु AI स्वास्थ्य सेवा पहुँच में आपका स्वागत है। हिंदी के लिए 1 दबाएं, अंग्रेजी के लिए 2 दबाएं, या अपनी बात बोलें।"
+        welcome_en = "Welcome to JanSethu AI. Press 1 for Hindi, Press 2 for Marathi, Press 3 for English, or speak naturally after the tone."
+        welcome_hi = "जनसेतु AI में आपका स्वागत है। हिंदी के लिए 1 दबाएं, मराठी के लिए 2 दबाएं, अंग्रेजी के लिए 3 दबाएं, या अपनी बात बोलें।"
+        welcome_mr = "जनसेतु AI मध्ये आपले स्वागत आहे. हिंदीसाठी 1 दाबा, मराठीसाठी 2 दाबा, इंग्रजीसाठी 3 दाबा, किंवा नैसर्गिकपणे बोला."
         
-        say_msg = welcome_hi if lang == "hi" else welcome_en
+        say_msg = welcome_mr if lang == "mr" else (welcome_hi if lang == "hi" else welcome_en)
         xml = generate_twiml(say_msg)
         
         return schemas.TelephonyResponse(
             call_sid=call_sid,
             speech_text=welcome_en,
             speech_text_hi=welcome_hi,
+            speech_text_mr=welcome_mr,
             twiml_xml=xml,
             sms_sent=False,
-            next_step="gather_language"
+            next_step="gather_language",
+            symptoms="Language Selection",
+            duration="Initial Call",
+            location="System IVR",
+            urgency="Low",
+            next_action="Language Selection Prompt"
         )
 
     # STEP 2: LANGUAGE SELECTION VIA KEYPAD (DTMF)
     if digits:
         if digits == "1":
             lang = "hi"
-            msg = "आपने हिंदी चुना है। आप किस अस्पताल या डॉक्टर की सुविधा चाहते हैं? बोलें।"
+            msg_en = "You selected Hindi. How can JanSethu AI help you today? Please speak."
+            msg_hi = "आपने हिंदी चुना है। जनसेतु AI आपकी क्या सहायता कर सकता है? बोलें।"
+            msg_mr = "आपण हिंदी निवडले आहे."
         elif digits == "2":
+            lang = "mr"
+            msg_en = "You selected Marathi. How can JanSethu AI help you today? Please speak."
+            msg_hi = "आपने मराठी चुना है।"
+            msg_mr = "आपण मराठी निवडले आहे. जनसेतु AI आपल्याला कशी मदत करू शकते? बोला."
+        elif digits == "3":
             lang = "en"
-            msg = "You selected English. What healthcare facility or doctor slot do you need? Speak now."
+            msg_en = "You selected English. How can JanSethu AI help you today? Please speak."
+            msg_hi = "आपने अंग्रेजी चुना है।"
+            msg_mr = "आपण इंग्रजी निवडले आहे."
         else:
-            msg = "Invalid input. Please speak your healthcare request."
-        
-        xml = generate_twiml(msg)
+            msg_en = "Invalid key. Please speak your healthcare request."
+            msg_hi = "अमान्य बटन। कृपया अपनी स्वास्थ्य सेवा समस्या बोलें।"
+            msg_mr = "अवैध कीपॅड इनपुट. कृपया आपली समस्या बोला."
+
+        chosen_msg = msg_mr if lang == "mr" else (msg_hi if lang == "hi" else msg_en)
+        xml = generate_twiml(chosen_msg)
         return schemas.TelephonyResponse(
             call_sid=call_sid,
-            speech_text=msg,
-            speech_text_hi=msg,
+            speech_text=msg_en,
+            speech_text_hi=msg_hi,
+            speech_text_mr=msg_mr,
             twiml_xml=xml,
             sms_sent=False,
-            next_step="gather_intent"
+            next_step="gather_intent",
+            symptoms="Language Set to " + lang.upper(),
+            duration="In Progress",
+            location="Awaiting Query",
+            urgency="Low",
+            next_action="Awaiting Natural Speech Query"
         )
 
     # STEP 3: SPEECH RECOGNITION & VOICE INTENT ENGINE PROCESS
-    voice_input = speech or "I need to see a doctor tomorrow in Sanganer"
+    voice_input = speech or "Fever for 3 days in Baramati"
     
-    # Delegate to existing backend voice intent engine
+    # Delegate to voice intent engine
     intent_res = intent_engine.process_voice_intent(
         schemas.VoiceRequest(transcript=voice_input, lang=lang),
         db
     )
 
-    resp_text = intent_res.response_text_hi if lang == "hi" and intent_res.response_text_hi else intent_res.response_text
+    resp_text = intent_res.response_text
+    resp_text_hi = intent_res.response_text_hi or resp_text
+    resp_text_mr = intent_res.response_text_mr or resp_text
     sms_body = None
     sms_sent = False
 
-    # Auto-create appointment if intent is appointment_request and slots are returned
-    if intent_res.intent == "appointment_request" and intent_res.slots and len(intent_res.slots) > 0:
-        slot = intent_res.slots[0]
+    # Auto-create appointment if intent is appointment_request AND not emergency
+    if not intent_res.is_emergency and intent_res.intent == "appointment_request":
+        slot_date = intent_res.slots[0].date if (intent_res.slots and len(intent_res.slots) > 0) else "Tomorrow"
+        slot_time = intent_res.slots[0].time if (intent_res.slots and len(intent_res.slots) > 0) else "09:00 AM"
         fac_id = intent_res.matched_facility_id or 1
         
         try:
             apt = crud.create_appointment(db, schemas.AppointmentCreate(
                 facility_id=fac_id,
-                service="General OPD",
-                date=slot.date,
-                time=slot.time,
+                service=intent_res.symptoms or "General OPD",
+                date=slot_date,
+                time=slot_time,
                 patient_name="Keypad Phone Caller",
                 phone=caller_phone
             ))
             
-            sms_body = f"JanSethu AI Confirmation: Appointment requested for {slot.date} at {slot.time}. Ticket #{apt.id}. Facility: {apt.facility_id}."
+            sms_body = f"JanSethu AI Ticket #{apt.id}: Appointment confirmed at {slot_date} {slot_time} in {intent_res.location or 'Baramati'}. Show SMS at OPD desk."
             sms_sent = send_sms_confirmation(caller_phone, sms_body)
             
-            resp_text += f" Appointment booked! SMS sent to {caller_phone}. Ticket #{apt.id}."
+            resp_text += f" Appointment request submitted! Ticket #{apt.id}. SMS sent to {caller_phone}."
+            resp_text_hi += f" अपॉइंटमेंट टिकट #{apt.id} दर्ज! {caller_phone} पर SMS भेजा गया।"
+            resp_text_mr += f" अपॉइंटमेंट तिकीट #{apt.id} नोंदवले! {caller_phone} वर SMS पाठवला."
         except Exception as e:
             print("Appointment creation error in telephony:", e)
 
-    xml = generate_twiml(resp_text)
+    say_final = resp_text_mr if lang == "mr" else (resp_text_hi if lang == "hi" else resp_text)
+    xml = generate_twiml(say_final)
 
     return schemas.TelephonyResponse(
         call_sid=call_sid,
         speech_text=resp_text,
-        speech_text_hi=resp_text,
+        speech_text_hi=resp_text_hi,
+        speech_text_mr=resp_text_mr,
         twiml_xml=xml,
         sms_sent=sms_sent,
         sms_body=sms_body,
-        next_step="completed"
+        next_step="completed" if not intent_res.is_emergency else "emergency_routing",
+        symptoms=intent_res.symptoms,
+        duration=intent_res.duration,
+        location=intent_res.location,
+        urgency=intent_res.urgency,
+        next_action=intent_res.next_action,
+        is_emergency=intent_res.is_emergency
     )

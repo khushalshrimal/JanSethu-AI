@@ -17,7 +17,7 @@ def test_telephony_channel():
     # 3. Keypad press '1' for Hindi
     res2 = client.post("/telephony/gather", json={"Caller": "+91-9876543210", "Digits": "1", "Step": "gather_language"})
     assert res2.status_code == 200
-    assert "हिंदी" in res2.json()["speech_text"]
+    assert "हिंदी" in res2.json()["speech_text_hi"]
 
     # 4. Spoken voice input appointment request with complete details
     res3 = client.post("/telephony/gather", json={
