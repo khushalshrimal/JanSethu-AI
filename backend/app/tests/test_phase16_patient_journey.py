@@ -443,12 +443,13 @@ class TestPhase16PatientJourney(unittest.TestCase):
 
     # 21. DTMF Journey Flow
     def test_21_dtmf_journey_flow(self):
-        start_res = self.client.post("/api/v1/phone/calls/start", json={"caller_phone": "+91-9876543210"})
+        start_res = self.client.post("/api/v1/phone/calls/start", json={"caller_phone": "+91-9999000021"})
         session_id = start_res.json()["session_id"]
         keys = ["1", "1", "1", "1", "1", "2", "1", "1"]
-        for key in keys:
+        for idx, key in enumerate(keys):
             res = self.client.post(f"/api/v1/phone/calls/{session_id}/input", json={"input_type": "DTMF", "value": key})
             self.assertEqual(res.status_code, 200)
+            print(f"STEP {idx+1} (key={key}): state={res.json()['current_state']}")
         self.assertEqual(res.json()["current_state"], "BOOKING_COMPLETED")
 
     # 22. Hindi Language Journey

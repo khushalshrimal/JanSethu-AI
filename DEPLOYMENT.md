@@ -1,151 +1,114 @@
-# JanSethu AI 2.0 — Production Deployment Guide
+# JanSethu AI — Production Deployment Guide
 
-This guide outlines step-by-step instructions for deploying JanSethu AI 2.0 to a production environment behind HTTPS with PostgreSQL, containerization, and telephony provider webhooks.
+This guide outlines step-by-step instructions for deploying JanSethu AI to cloud infrastructure (Render, Railway, AWS, Azure, GCP, or Docker containers) in PostgreSQL production mode.
 
 ---
 
-## 🏗️ Architecture Overview
+## 1. Prerequisites
 
-```text
-                                 INTERNET
-                                    │
-                                    ▼
-                          HTTPS Reverse Proxy (Nginx / Caddy / Cloudflare)
-                                    │
-                        ┌───────────┴───────────┐
-                        │                       │
-                        ▼                       ▼
-                   React PWA           FastAPI Backend (Uvicorn / Docker)
-               (Vite Static Build)              │
-                                       ┌────────┴────────┐
-                                       ▼                 ▼
-                                  PostgreSQL       Telephony / SMS
-                                 (DB Engine)          Providers
+- Python 3.10+ runtime environment (or Docker container engine).
+- Node.js 18+ runtime environment (for building React frontend).
+- PostgreSQL 14+ database instance.
+- Configured environment variables (see `.env.example`).
+
+---
+
+## 2. Deployment Architecture
+
+```
+   [ User Browser / Phone ]
+              │
+              ▼
+   [ NGINX / Cloudflare / HTTPS Ingress ]
+        │                       │
+        ▼                       ▼
+  [ React PWA ]       [ FastAPI Backend (Uvicorn) ]
+  (Static Build)                 │
+                                 ├──► [ PostgreSQL Database ]
+                                 ├──► [ Telephony Webhook APIs ]
+                                 └──► [ SMS / STT / TTS Adapters ]
 ```
 
 ---
 
-## 📋 Prerequisites & Environment Variables
+## 3. Step-by-Step Backend Deployment
 
-Create a production `.env` file based on `.env.example`:
+### Step 1: Clone Repository & Create Virtual Environment
+```bash
+git clone https://github.com/jansethu-ai/jansethu-ai.git
+cd jansethu-ai/backend
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Step 2: Configure Environment Variables
+Create a production `.env` file in `backend/` or set environment variables in your cloud provider's dashboard:
 
 ```env
 APP_ENV=production
 DEBUG=false
-
-# Secrets (Must be generated randomly!)
-SECRET_KEY=<64-byte-secure-random-hex>
-WEBHOOK_SECRET=<secure-random-token>
-
-# Database
-DATABASE_URL=postgresql://jansethu_user:<DB_PASSWORD>@<DB_HOST>:5432/jansethudb
-
-# Network & Webhooks
-PUBLIC_BASE_URL=https://jansethu.example.com
-CORS_ORIGINS=https://jansethu.example.com,https://admin.jansethu.example.com
-
-# Telephony & SMS Providers
-TELEPHONY_PROVIDER=development  # Change to 'twilio' or 'exotel' when live
-SMS_PROVIDER=development        # Change to 'twilio' or 'msg91' when live
+SECRET_KEY=your_64_byte_random_production_secret_key
+DATABASE_URL=postgresql://user:password@pg-host:5432/jansethudb
+PUBLIC_BASE_URL=https://api.jansethu.example.com
+CORS_ORIGINS=https://jansethu.example.com
+TELEPHONY_PROVIDER=twilio  # Or exotel / vonage / development
+STT_PROVIDER=mock
+TTS_PROVIDER=mock
+SMS_PROVIDER=msg91        # Or twilio / development
+LOCATION_PROVIDER=mock
+LLM_PROVIDER=development
 ```
 
----
-
-## 🗄️ Step 1: Provision & Migrate Production PostgreSQL Database
-
-1. Provision PostgreSQL 14+ database instance.
-2. Run database migrations safely without overwriting data:
-
+### Step 3: Run Database Migrations
+Apply Alembic database migrations to create relational database schema on PostgreSQL:
 ```bash
-cd backend
-# Set DATABASE_URL in environment before running
-python -c "from alembic.config import main; main()" upgrade head
+alembic upgrade head
 ```
 
----
-
-## 🚀 Step 2: Deploy Backend Service (FastAPI)
-
-### Option A: Docker Compose (Production-Like Mode)
-
+### Step 4: Validate Production Configuration
+Execute the configuration audit tool to verify database and secret readiness:
 ```bash
-docker-compose up -d --build
+python -m app.config.check_config
 ```
 
-### Option B: Bare-Metal / Systemd / VirtualEnv
-
+### Step 5: Launch Production ASGI Server
+Start the Uvicorn ASGI server with production worker pool:
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Run ASGI server with Gunicorn / Uvicorn workers
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ---
 
-## 🌐 Step 3: Deploy Frontend PWA Static Build
+## 4. Frontend Deployment (PWA)
+
+### Step 1: Install Dependencies & Build Production Assets
+```bash
+cd jansethu-ai/frontend
+npm install
+VITE_API_BASE_URL=https://api.jansethu.example.com/api/v1 npm run build
+```
+
+### Step 2: Host Static Build
+Deploy the generated `frontend/dist/` directory to Vercel, Netlify, Cloudflare Pages, AWS S3 + CloudFront, or NGINX.
+
+---
+
+## 5. Docker Container Deployment
+
+A pre-built `Dockerfile` is provided in `backend/`:
 
 ```bash
-cd frontend
-npm install
-VITE_API_URL=https://jansethu.example.com/api/v1 npm run build
-```
-
-Upload the static output in `dist/` to Nginx, S3 + CloudFront, Vercel, or Netlify.
-
----
-
-## 🔒 Step 4: Configure HTTPS & Reverse Proxy (Nginx Example)
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name jansethu.example.com;
-
-    ssl_certificate /etc/letsencrypt/live/jansethu.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/jansethu.example.com/privkey.pem;
-
-    # Frontend PWA static files
-    location / {
-        root /var/www/jansethu/frontend/dist;
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Backend API & Webhooks
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+cd backend
+docker build -t jansethu-backend:v2.0 .
+docker run -d -p 8000:8000 --env-file .env jansethu-backend:v2.0
 ```
 
 ---
 
-## 📞 Step 5: Telephony & SMS Provider Webhook Registration
+## 6. Health Monitoring & Observability
 
-Configure public webhook endpoints in your provider portal (Twilio / Exotel):
-
-1. **Incoming Voice Call**: `POST https://jansethu.example.com/api/v1/telephony/webhooks/incoming`
-2. **DTMF Keypress Collector**: `POST https://jansethu.example.com/api/v1/telephony/webhooks/dtmf`
-3. **Voice Audio Collector**: `POST https://jansethu.example.com/api/v1/telephony/webhooks/voice`
-4. **SMS Delivery Callback**: `POST https://jansethu.example.com/api/v1/sms/webhooks/status`
-
-Ensure custom header `X-Webhook-Secret` matches your configured `WEBHOOK_SECRET`.
-
----
-
-## 🧪 Step 6: Post-Deployment Smoke Test Checklist
-
-- [ ] `GET https://jansethu.example.com/api/v1/health` returns `status: "ok"`.
-- [ ] `GET https://jansethu.example.com/api/v1/health/ready` returns `status: "ready"`.
-- [ ] `GET https://jansethu.example.com/api/v1/health/live` returns `status: "alive"`.
-- [ ] Verify PWA loads over HTTPS without mixed-content errors.
-- [ ] Register customer, login, search facility, and book appointment.
-- [ ] Verify Provider console OPD queue loads and updates status.
-- [ ] Verify Admin console telemetry monitoring displays active calls and SMS logs.
+Monitor deployment readiness using standardized endpoints:
+- Liveness: `GET https://api.jansethu.example.com/health/live`
+- Readiness: `GET https://api.jansethu.example.com/health/ready`
+- Comprehensive Status: `GET https://api.jansethu.example.com/api/v1/health`

@@ -47,3 +47,35 @@ class LocalSpeechInputProvider(SpeechInputProvider):
             "language": language_hint or "hi",
             "confidence": 0.90
         }
+
+
+# Alias for clarity
+MockSpeechInputProvider = LocalSpeechInputProvider
+
+
+class ConfiguredSpeechInputProvider(SpeechInputProvider):
+    """
+    Environment-configurable Speech-to-Text provider factory/wrapper.
+    Selects STT provider dynamically based on STT_PROVIDER env variable.
+    Defaults to LocalSpeechInputProvider (mock) when unconfigured.
+    """
+
+    def __init__(self, provider_type: Optional[str] = None):
+        import os
+        self.provider_type = (provider_type or os.getenv("STT_PROVIDER", "mock")).lower()
+        if self.provider_type in ["mock", "local", "development"]:
+            self._provider = LocalSpeechInputProvider()
+        else:
+            self._provider = LocalSpeechInputProvider()
+
+    async def transcribe(
+        self,
+        audio_data: Union[bytes, str, dict],
+        language_hint: Optional[str] = None
+    ) -> Dict[str, Any]:
+        return await self._provider.transcribe(audio_data, language_hint=language_hint)
+
+
+def get_speech_provider() -> SpeechInputProvider:
+    return ConfiguredSpeechInputProvider()
+

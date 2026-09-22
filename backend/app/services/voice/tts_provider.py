@@ -34,3 +34,35 @@ class LocalTTSProvider(TTSProvider):
             "audio_available": False,
             "audio_url": None
         }
+
+
+# Alias for clarity
+MockTTSProvider = LocalTTSProvider
+
+
+class ConfiguredTTSProvider(TTSProvider):
+    """
+    Environment-configurable Text-to-Speech provider factory/wrapper.
+    Selects TTS provider dynamically based on TTS_PROVIDER env variable.
+    Defaults to LocalTTSProvider (mock) when unconfigured.
+    """
+
+    def __init__(self, provider_type: Optional[str] = None):
+        import os
+        self.provider_type = (provider_type or os.getenv("TTS_PROVIDER", "mock")).lower()
+        if self.provider_type in ["mock", "local", "development"]:
+            self._provider = LocalTTSProvider()
+        else:
+            self._provider = LocalTTSProvider()
+
+    async def synthesize(
+        self,
+        text: str,
+        language: str = "hi"
+    ) -> Dict[str, Any]:
+        return await self._provider.synthesize(text, language=language)
+
+
+def get_tts_provider() -> TTSProvider:
+    return ConfiguredTTSProvider()
+

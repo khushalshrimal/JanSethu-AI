@@ -16,8 +16,12 @@ class Doctor(Base):
     specialization = Column(String(100), nullable=False)
     consultation_type = Column(String(50), default="OPD_IN_PERSON", nullable=False)
     phone_number = Column(String(20), nullable=True)
+    experience_years = Column(Integer, default=5, nullable=False)
+    languages = Column(String(100), default="Hindi, English", nullable=False)
+    gender = Column(String(20), default="Male", nullable=False)
     status = Column(Enum(DoctorStatus), default=DoctorStatus.ACTIVE, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_demo_data = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -28,6 +32,7 @@ class Doctor(Base):
     availabilities = relationship("DoctorAvailability", back_populates="doctor", cascade="all, delete-orphan")
     schedule_exceptions = relationship("DoctorScheduleException", back_populates="doctor", cascade="all, delete-orphan")
     appointments = relationship("Appointment", back_populates="doctor")
+    appointment_slots = relationship("AppointmentSlot", back_populates="doctor", cascade="all, delete-orphan")
 
 
 class DoctorAvailability(Base):

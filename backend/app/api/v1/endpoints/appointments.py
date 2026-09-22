@@ -49,7 +49,8 @@ def get_my_appointments(
         from app.models.appointment import Appointment
         query = db.query(Appointment).order_by(Appointment.id.desc()).limit(15)
         apts = query.all()
-        return [AppointmentResponse.model_validate(a) for a in apts]
+        return [AppointmentService.format_appointment_response(db, a) for a in apts]
+
 
     return AppointmentService.get_my_appointments(
         db=db,

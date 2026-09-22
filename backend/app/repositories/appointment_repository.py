@@ -53,6 +53,10 @@ class AppointmentRepository:
         booking_channel: BookingChannel,
         reason_for_visit: Optional[str] = None
     ) -> Appointment:
+        existing = AppointmentRepository.get_existing_slot_booking(db, doctor_id, apt_date, start_time)
+        if existing:
+            raise ValueError("SLOT_ALREADY_BOOKED: The selected appointment slot is no longer available.")
+
         code = generate_unique_confirmation_code(db)
         db_apt = Appointment(
             patient_id=patient_id,

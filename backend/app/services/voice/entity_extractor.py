@@ -50,20 +50,28 @@ class EntityExtractor:
 
         if "facility_search" not in entities:
             # Dynamic location extraction (e.g. "Main Jaipur mein rehta hoon" -> "jaipur")
-            loc_match = re.search(r'([a-zA-Z]{3,15})\s+(mein|city|area|pincode|paas)', t)
-            if loc_match and loc_match.group(1).lower() not in ["main", "aap", "mujhe", "koi", "is", "mera", "meri"]:
-                entities["facility_search"] = loc_match.group(1).lower()
+            loc_match = re.search(r'\b([a-zA-Z]{3,15})\s+\b(mein|city|area|pincode|paas|me)\b', t)
+            if loc_match:
+                cand = loc_match.group(1).lower()
+                non_city_words = {
+                    "namaste", "namaskar", "hello", "hi", "main", "aap", "aapka", "mujhe", "mera", "meri",
+                    "koi", "is", "seene", "dard", "fever", "saans", "doctor", "hospital", "kal", "aaj", "parso",
+                    "subah", "shaam", "baje", "chahiye", "milna", "jaana", "karte", "karne", "lene", "aane",
+                    "dikhane", "samajh", "rahi", "raha", "hote", "batao", "bataiye", "help", "bhejo"
+                }
+                if cand not in non_city_words:
+                    entities["facility_search"] = cand
 
-        # 4. Department Keywords
+        # 4. Department & Service Keywords
         dept_candidates = {
+            "orthopedics": ["orthopedics", "ortho", "haddi", "bone", "jod", "हाडे", "leg ka operation", "operation", "leg operation", "knee", "surgery", "haddi ka doctor"],
             "pediatrics": ["pediatrics", "pediatrician", "child", "bacho", "bache", "bachhe", "bachha", "baby", "बालक", "लहान मुले"],
             "gynecology": ["gynecology", "maternity", "women", "pregnancy", "pregnant", "garbhvati", "महिला", "स्त्रीरोग"],
             "dentistry": ["dentistry", "dental", "daant", "teeth", "दांत"],
             "dermatology": ["dermatology", "skin", "khajli", "skin allergy", "त्वचा"],
             "ophthalmology": ["ophthalmology", "eye", "aankh", "drishti", "डोळे"],
-            "orthopedics": ["orthopedics", "ortho", "haddi", "bone", "jod", "हाडे"],
             "general medicine": ["general medicine", "physician", "general", "fever", "bukhar", "pet dard", "pet mein dard", "pet", "sar dard", "dard", "headache", "सामान्य"],
-            "emergency": ["emergency", "casualty", "आपत्कालीन"]
+            "emergency": ["emergency", "casualty", "आपत्कालीन", "saans lene mein dikkat", "saans nahi aara", "saas lene"]
         }
         for d_key, d_words in dept_candidates.items():
             if any(re.search(rf'\b{re.escape(dw)}\b', t) or dw in t for dw in d_words):
@@ -71,7 +79,7 @@ class EntityExtractor:
                 break
 
         # 5. Doctor Name Keywords
-        doctor_candidates = ["rajesh", "sharma", "patel", "deshmukh", "kulkarni"]
+        doctor_candidates = ["lakshya", "amit", "priya", "rajesh", "sharma", "patel", "deshmukh", "kulkarni", "patil"]
         for doc_c in doctor_candidates:
             if doc_c in t:
                 entities["doctor_search"] = doc_c
@@ -83,6 +91,7 @@ class EntityExtractor:
             entities["pincode"] = pincode_match.group(0)
             if "facility_search" not in entities:
                 entities["facility_search"] = pincode_match.group(0)
+
 
         # 7. Confirmation Code Extraction (JS-2026-XXXXXX or 6-char hex)
         code_match = re.search(r'js-\d{4}-[a-z0-9]{6}', t, re.IGNORECASE)

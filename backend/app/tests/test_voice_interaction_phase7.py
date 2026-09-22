@@ -59,7 +59,7 @@ class TestPhase7VoiceInteraction(unittest.TestCase):
         Verify end-to-end Hindi voice booking:
         Start Call -> "Mujhe doctor ko dikhana hai" -> "Baramati" -> "Pediatrics" -> "Kal" -> "Haan, confirm karo" -> BOOKING_COMPLETED.
         """
-        phone = "+91-9876543210" # Seeded user Rahul Pawar
+        phone = f"+91-98{uuid.uuid4().hex[:8]}"
         start_res = self.client.post("/api/v1/phone/calls/start", json={"caller_phone": phone})
         self.assertEqual(start_res.status_code, 201)
         session_id = start_res.json()["session_id"]

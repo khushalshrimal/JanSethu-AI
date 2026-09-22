@@ -53,7 +53,7 @@ class TestPhase6PhoneChannel(unittest.TestCase):
         Verify complete DTMF keypad flow:
         Start Call -> Hindi (1) -> Book (1) -> Location (1) -> Facility (1) -> Dept (1) -> Doctor (1) -> Date (1) -> Slot (1) -> Confirm (1) -> BOOKING_COMPLETED.
         """
-        phone = "+91-9876543210" # Seeded user Rahul Pawar
+        phone = f"+91-99{uuid.uuid4().hex[:8]}"
         start_res = self.client.post("/api/v1/phone/calls/start", json={"caller_phone": phone})
         session_id = start_res.json()["session_id"]
 

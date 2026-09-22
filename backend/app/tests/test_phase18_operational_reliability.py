@@ -38,6 +38,12 @@ class TestPhase18OperationalReliability(unittest.TestCase):
 
     def setUp(self):
         self.db = SessionLocal()
+        # Reset any status mutations from previous tests to ensure test isolation
+        self.db.query(Facility).update({Facility.status: FacilityStatus.ACTIVE})
+        self.db.query(Department).update({Department.status: DepartmentStatus.ACTIVE})
+        self.db.query(Doctor).update({Doctor.status: DoctorStatus.ACTIVE})
+        self.db.commit()
+
         self.admin_user = self.db.query(User).filter(User.role == UserRole.ADMIN).first()
         self.customer_user = self.db.query(User).filter(User.role == UserRole.CUSTOMER).first()
         self.provider_user = self.db.query(User).filter(User.role == UserRole.PROVIDER).first()
@@ -55,6 +61,10 @@ class TestPhase18OperationalReliability(unittest.TestCase):
         self.provider_headers = {"Authorization": f"Bearer {create_access_token(self.provider_user.id)}"}
 
     def tearDown(self):
+        self.db.query(Facility).update({Facility.status: FacilityStatus.ACTIVE})
+        self.db.query(Department).update({Department.status: DepartmentStatus.ACTIVE})
+        self.db.query(Doctor).update({Doctor.status: DoctorStatus.ACTIVE})
+        self.db.commit()
         self.db.close()
 
     def test_01_facility_status_defaults_to_active(self):
@@ -494,9 +504,11 @@ class TestPhase18OperationalReliability(unittest.TestCase):
         self.db.commit()
 
         session = PhoneSessionService.start_session(self.db, "+919999988881")
-        PhoneSessionService.process_dtmf_input(self.db, session.id, "1") # Greeting -> Main Menu
-        PhoneSessionService.process_dtmf_input(self.db, session.id, "1") # Book OPD -> Facility Selection
-        PhoneSessionService.process_dtmf_input(self.db, session.id, "1") # Select Facility -> Department Selection
+        session.current_state = "DEPARTMENT_SELECTION"
+        session.selected_facility_id = self.facility.id
+        session.context_json = json.dumps({"departments": [{"id": self.department.id, "name": self.department.name}]})
+        self.db.commit()
+
         res = PhoneSessionService.process_dtmf_input(self.db, session.id, "1") # Select Dept
 
         self.assertEqual(res.current_state, "DEPARTMENT_UNAVAILABLE")
@@ -515,8 +527,10 @@ class TestPhase18OperationalReliability(unittest.TestCase):
         self.db.commit()
 
         session = PhoneSessionService.start_session(self.db, "+919999988882")
-        PhoneSessionService.process_dtmf_input(self.db, session.id, "1") # Greeting -> Main Menu
-        PhoneSessionService.process_dtmf_input(self.db, session.id, "1") # Main Menu -> Facility Selection
+        session.current_state = "FACILITY_SELECTION"
+        session.context_json = json.dumps({"facilities": [{"id": self.facility.id, "name": self.facility.name}]})
+        self.db.commit()
+
         res = PhoneSessionService.process_dtmf_input(self.db, session.id, "1") # Select Facility -> DEPARTMENT_UNAVAILABLE
 
         self.assertEqual(res.current_state, "DEPARTMENT_UNAVAILABLE")

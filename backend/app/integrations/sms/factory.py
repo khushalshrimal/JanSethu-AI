@@ -2,6 +2,7 @@ from app.core.config import settings
 from app.integrations.sms.base import SMSProvider
 from app.integrations.sms.development_provider import DevelopmentSMSProvider
 from app.integrations.sms.msg91_provider import MSG91SMSProvider
+from app.integrations.sms.twilio_sms_provider import TwilioSMSProvider
 
 _sms_provider_instance = None
 
@@ -14,10 +15,13 @@ def get_sms_provider(override_name: str = None) -> SMSProvider:
 
     if provider_name == "msg91":
         instance = MSG91SMSProvider()
+    elif provider_name == "twilio":
+        instance = TwilioSMSProvider()
     else:
         instance = DevelopmentSMSProvider()
 
     if override_name is None:
         _sms_provider_instance = instance
     return instance
+
 

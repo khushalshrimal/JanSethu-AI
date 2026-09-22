@@ -49,3 +49,20 @@ class VoiceNormalizer:
             normalized = re.sub(pattern, replacement, normalized)
 
         return normalized
+
+    @staticmethod
+    def normalize_confirmation(text: str) -> Optional[bool]:
+        if not text:
+            return None
+        t = text.lower().strip()
+        no_keywords = ["nahi", "nahin", "no", "don't book", "don't cancel", "mat karo", "nayi", "नाही", "नको", "mat"]
+        yes_keywords = ["haan", "ji haan", "yes", "confirm", "kar do", "kardo", "radd", "confirm karo", "book it", "okay", "ok", "हो", "होय", "करा", "कन्फर्म करा", "pakka", "नक्की"]
+
+        for nk in no_keywords:
+            if nk in t or t == nk:
+                return False
+        for yk in yes_keywords:
+            if yk in t or t == yk:
+                return True
+        return None
+

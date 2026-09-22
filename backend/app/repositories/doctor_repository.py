@@ -16,6 +16,17 @@ class DoctorRepository:
         return query.all()
 
     @staticmethod
+    def search_doctors(db: Session, q: Optional[str] = None, facility_id: Optional[int] = None, department_id: Optional[int] = None) -> List[Doctor]:
+        query = db.query(Doctor).filter(Doctor.is_active == True)
+        if facility_id:
+            query = query.filter(Doctor.facility_id == facility_id)
+        if department_id:
+            query = query.filter(Doctor.department_id == department_id)
+        if q:
+            query = query.filter(Doctor.name.ilike(f"%{q}%"))
+        return query.all()
+
+    @staticmethod
     def create_doctor(db: Session, doctor_in: DoctorCreate) -> Doctor:
         db_doctor = Doctor(**doctor_in.model_dump())
         db.add(db_doctor)

@@ -21,7 +21,13 @@ def check_health(db: Session = Depends(get_db)):
         service=settings.PROJECT_NAME,
         version=settings.VERSION,
         database=db_status,
-        environment=settings.APP_ENV
+        environment=settings.APP_ENV,
+        telephony=getattr(settings, "TELEPHONY_PROVIDER", "development"),
+        stt=getattr(settings, "STT_PROVIDER", "mock"),
+        tts=getattr(settings, "TTS_PROVIDER", "mock"),
+        sms=getattr(settings, "SMS_PROVIDER", "development"),
+        location=getattr(settings, "LOCATION_PROVIDER", "mock"),
+        llm=getattr(settings, "LLM_PROVIDER", "development")
     )
 
 @router.get("/health/live", summary="Liveness check for container orchestration")

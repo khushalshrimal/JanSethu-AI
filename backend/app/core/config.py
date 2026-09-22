@@ -2,6 +2,22 @@ import os
 from typing import List
 from pydantic import BaseModel
 
+# Load environment variables from backend/.env file if present
+_env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env")
+if os.path.exists(_env_file):
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env_file)
+    except ImportError:
+        with open(_env_file, "r", encoding="utf-8") as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith("#") and "=" in _line:
+                    _k, _v = _line.split("=", 1)
+                    _k, _v = _k.strip(), _v.strip().strip('"').strip("'")
+                    if _k and _k not in os.environ:
+                        os.environ[_k] = _v
+
 class Settings(BaseModel):
     PROJECT_NAME: str = os.getenv("PROJECT_NAME", "JanSethu AI 2.0")
     VERSION: str = os.getenv("VERSION", "2.0.0")
@@ -52,6 +68,23 @@ class Settings(BaseModel):
     MSG91_SENDER_ID: str = os.getenv("MSG91_SENDER_ID", "JANSTH")
     MSG91_TEMPLATE_ID: str = os.getenv("MSG91_TEMPLATE_ID", "")
 
+    # LLM / NLU Provider Configuration
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "development").lower()
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://localhost:11434")
+
+    # STT & TTS Providers
+    STT_PROVIDER: str = os.getenv("STT_PROVIDER", "mock").lower()
+    TTS_PROVIDER: str = os.getenv("TTS_PROVIDER", "mock").lower()
+    
+    # Location Provider
+    LOCATION_PROVIDER: str = os.getenv("LOCATION_PROVIDER", "mock").lower()
+    LOCATION_API_KEY: str = os.getenv("LOCATION_API_KEY", "")
+
+    # Vonage Credentials
+    VONAGE_API_KEY: str = os.getenv("VONAGE_API_KEY", "")
+    VONAGE_API_SECRET: str = os.getenv("VONAGE_API_SECRET", "")
+    VONAGE_PHONE_NUMBER: str = os.getenv("VONAGE_PHONE_NUMBER", "")
+
 settings = Settings()
-
-

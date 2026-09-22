@@ -264,7 +264,12 @@ class PhoneSessionService:
         elif state == "MAIN_MENU":
             if clean_key == "1":
                 session.selected_intent = "BOOK_APPOINTMENT"
-                facs = FacilityService.list_facilities(db)
+                all_facs = FacilityService.list_facilities(db)
+                facs = [f for f in all_facs if db.query(Department).filter(
+                    Department.facility_id == f.id,
+                    Department.is_active == True,
+                    Department.status == DepartmentStatus.ACTIVE
+                ).first()]
                 if facs:
                     context["facilities"] = [{"id": f.id, "name": f.name} for f in facs[:5]]
                     session.context_json = json.dumps(context)
@@ -317,11 +322,17 @@ class PhoneSessionService:
                 if fac_obj and (not fac_obj.is_active or fac_obj.status == FacilityStatus.INACTIVE or fac_obj.status == FacilityStatus.TEMPORARILY_UNAVAILABLE):
                     session.current_state = "FACILITY_UNAVAILABLE"
                 else:
-                    depts = db.query(Department).filter(
+                    all_depts = db.query(Department).filter(
                         Department.facility_id == selected_fac["id"],
                         Department.is_active == True,
                         Department.status == DepartmentStatus.ACTIVE
                     ).all()
+                    depts = [d for d in all_depts if db.query(Doctor).filter(
+                        Doctor.facility_id == selected_fac["id"],
+                        Doctor.department_id == d.id,
+                        Doctor.is_active == True,
+                        Doctor.status == DoctorStatus.ACTIVE
+                    ).first()]
                     if depts:
                         context["departments"] = [{"id": d.id, "name": d.name} for d in depts[:5]]
                         session.context_json = json.dumps(context)
@@ -695,6 +706,8 @@ class PhoneSessionService:
             except Exception:
                 context = {}
 
+        state = session.current_state
+
         # Check confidence threshold
         if nlu.confidence < 0.25 and nlu.intent not in [IntentEnum.EMERGENCY, IntentEnum.END_CALL] and state != "PHONE_REGISTRATION_NAME":
             session.updated_at = datetime.utcnow()
@@ -901,11 +914,19 @@ class PhoneSessionService:
                 if fac_obj and (not fac_obj.is_active or fac_obj.status == FacilityStatus.INACTIVE or fac_obj.status == FacilityStatus.TEMPORARILY_UNAVAILABLE):
                     session.current_state = "FACILITY_UNAVAILABLE"
                 else:
-                    depts = db.query(Department).filter(
+                    all_depts = db.query(Department).filter(
                         Department.facility_id == selected_fac.id,
                         Department.is_active == True,
                         Department.status == DepartmentStatus.ACTIVE
                     ).all()
+                    depts = [d for d in all_depts if db.query(Doctor).filter(
+                        Doctor.facility_id == selected_fac.id,
+                        Doctor.department_id == d.id,
+                        Doctor.is_active == True,
+                        Doctor.status == DoctorStatus.ACTIVE
+                    ).first()]
+                    if not depts and all_depts:
+                        depts = all_depts
                     if depts:
                         context["departments"] = [{"id": d.id, "name": d.name} for d in depts[:5]]
                         session.context_json = json.dumps(context)
@@ -937,6 +958,12 @@ class PhoneSessionService:
                         Doctor.is_active == True,
                         Doctor.status == DoctorStatus.ACTIVE
                     ).all()
+                    if not docs:
+                        docs = db.query(Doctor).filter(
+                            Doctor.facility_id == session.selected_facility_id,
+                            Doctor.is_active == True,
+                            Doctor.status == DoctorStatus.ACTIVE
+                        ).all()
                     if docs:
                         context["doctors"] = [{"id": d.id, "name": d.name} for d in docs[:5]]
                         session.context_json = json.dumps(context)

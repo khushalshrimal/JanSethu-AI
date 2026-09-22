@@ -25,21 +25,28 @@ class TestPhase4Appointments(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        seed_database(force_reset=True)
+        pass
 
     def setUp(self):
         self.db: Session = SessionLocal()
-        # Clean test tables
-        self.db.query(SMSNotification).delete()
-        self.db.query(AppointmentAuditLog).delete()
-        self.db.query(Appointment).delete()
-        self.db.query(DoctorScheduleException).delete()
-        self.db.query(DoctorAvailability).delete()
-        self.db.query(Doctor).delete()
-        self.db.query(Department).delete()
-        self.db.query(Facility).delete()
-        self.db.query(PatientProfile).delete()
-        self.db.query(User).delete()
+        # Clean test-specific entities using explicit ID filtering to preserve main seed database
+        test_user_ids = [u.id for u in self.db.query(User).filter(User.email.like("%@test.com")).all()]
+        if test_user_ids:
+            self.db.query(SMSNotification).filter(SMSNotification.user_id.in_(test_user_ids)).delete(synchronize_session=False)
+            self.db.query(AppointmentAuditLog).filter(AppointmentAuditLog.actor_id.in_(test_user_ids)).delete(synchronize_session=False)
+            self.db.query(PatientProfile).filter(PatientProfile.user_id.in_(test_user_ids)).delete(synchronize_session=False)
+            self.db.query(User).filter(User.id.in_(test_user_ids)).delete(synchronize_session=False)
+
+        test_fac_ids = [f.id for f in self.db.query(Facility).filter(Facility.name == "Test City Hospital").all()]
+        if test_fac_ids:
+            self.db.query(Appointment).filter(Appointment.facility_id.in_(test_fac_ids)).delete(synchronize_session=False)
+            test_doc_ids = [d.id for d in self.db.query(Doctor).filter(Doctor.facility_id.in_(test_fac_ids)).all()]
+            if test_doc_ids:
+                self.db.query(DoctorScheduleException).filter(DoctorScheduleException.doctor_id.in_(test_doc_ids)).delete(synchronize_session=False)
+                self.db.query(DoctorAvailability).filter(DoctorAvailability.doctor_id.in_(test_doc_ids)).delete(synchronize_session=False)
+                self.db.query(Doctor).filter(Doctor.id.in_(test_doc_ids)).delete(synchronize_session=False)
+            self.db.query(Department).filter(Department.facility_id.in_(test_fac_ids)).delete(synchronize_session=False)
+            self.db.query(Facility).filter(Facility.id.in_(test_fac_ids)).delete(synchronize_session=False)
         self.db.commit()
 
         # Seed Test Core Entities
@@ -133,7 +140,10 @@ class TestPhase4Appointments(unittest.TestCase):
         self.assertIn("JS-2026-", sms.message)
 
         # Verify Audit Log
-        audit = self.db.query(AppointmentAuditLog).filter(AppointmentAuditLog.appointment_id == res.id).first()
+        audit = self.db.query(AppointmentAuditLog).filter(
+            AppointmentAuditLog.appointment_id == res.id,
+            AppointmentAuditLog.event_type == "APPOINTMENT_CREATED"
+        ).first()
         self.assertIsNotNone(audit)
         self.assertEqual(audit.event_type, "APPOINTMENT_CREATED")
 

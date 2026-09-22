@@ -1,5 +1,5 @@
 import uuid
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -98,6 +98,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # Mount API V1 router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+from app.database.session import get_db
+
 # Top-level health fallback
 @app.get("/health", tags=["Health Check"])
 @app.get("/", tags=["Root"])
@@ -109,6 +111,15 @@ def root_health():
         "docs_url": "/docs" if settings.DEBUG else "disabled",
         "api_v1_health": f"{settings.API_V1_STR}/health"
     }
+
+@app.get("/health/live", tags=["Health Check"])
+def top_level_liveness():
+    return {"status": "alive", "service": settings.PROJECT_NAME, "version": settings.VERSION}
+
+@app.get("/health/ready", tags=["Health Check"])
+def top_level_readiness(db=Depends(get_db)):
+    from app.api.v1.endpoints.health import readiness_check
+    return readiness_check(db)
 
 if __name__ == "__main__":
     import uvicorn

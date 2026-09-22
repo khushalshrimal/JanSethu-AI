@@ -50,6 +50,15 @@ export const phoneService = {
       language: language
     });
     return response.data;
+  },
+
+  sendConversationMessage: async (sessionId, message, languageHint = 'hi') => {
+    const response = await apiClient.post('/conversation/message', {
+      session_id: sessionId,
+      message: message,
+      language_hint: languageHint
+    });
+    return response.data;
   }
 };
 
@@ -60,4 +69,5 @@ export const endCallSession = phoneService.endCallSession;
 export const sendVoiceInput = phoneService.sendVoiceInput;
 export const understandVoice = phoneService.understandVoice;
 export const ttsVoice = phoneService.ttsVoice;
+export const sendConversationMessage = phoneService.sendConversationMessage;
 

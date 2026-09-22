@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import health, auth, users, facilities, doctors, appointments, phone, provider, admin, telephony_webhooks
+from app.api.v1.endpoints import health, auth, users, facilities, doctors, appointments, phone, provider, admin, telephony_webhooks, ai, conversation, emergency
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
@@ -14,3 +14,7 @@ api_router.include_router(admin.router, prefix="/admin", tags=["Admin Console"])
 api_router.include_router(phone.router, prefix="/phone", tags=["Telephony Phone Engine"])
 api_router.include_router(telephony_webhooks.router, prefix="/telephony", tags=["Telephony Webhooks & Integration"])
 api_router.include_router(telephony_webhooks.router, prefix="/sms", tags=["SMS Webhooks & Delivery Callbacks"])
+api_router.include_router(ai.router, prefix="/ai", tags=["AI & NLU Pipeline"])
+api_router.include_router(conversation.router, prefix="/conversation", tags=["Stateful Conversation Manager"])
+api_router.include_router(emergency.router, prefix="/emergency", tags=["Emergency Safety & Ambulance Flow"])
+

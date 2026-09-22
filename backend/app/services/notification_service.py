@@ -141,11 +141,12 @@ class NotificationService:
                 else:
                     sms_record.status = NotificationStatus.FAILED
                     sms_record.failure_reason = fail_reason or "Provider dispatch failed"
+                db.commit()
             else:
                 try:
                     from app.integrations.sms.factory import get_sms_provider
                     from app.integrations.sms.models import SMSRequest
-                    provider_inst = get_sms_provider()
+                    provider_inst = cls.provider if getattr(cls, 'provider', None) is not None else get_sms_provider()
                     req = SMSRequest(to_number=norm_phone, message=msg_text, event_type=evt_upper)
 
                     # Execute provider send
@@ -189,8 +190,6 @@ class NotificationService:
                     else:
                         sms_record.status = NotificationStatus.FAILED
                         sms_record.failure_reason = fail_reason or str(pe)
-                    sms_record.status = NotificationStatus.FAILED
-                    sms_record.failure_reason = fail_reason or str(pe)
 
             db.commit()
             db.refresh(sms_record)
