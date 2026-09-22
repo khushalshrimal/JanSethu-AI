@@ -32,14 +32,21 @@ export default function PhoneSimulator() {
   // Cleanup speech synthesis & recognition on unmount
   useEffect(() => {
     return () => {
+      activeSessionRef.current = null;
+      isSpeakingRef.current = false;
+      isProcessingTurnRef.current = false;
       if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+        try { window.speechSynthesis.cancel(); } catch (e) {}
       }
       if (ttsSafetyTimeoutRef.current) {
         clearTimeout(ttsSafetyTimeoutRef.current);
+        ttsSafetyTimeoutRef.current = null;
       }
       if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (e) {}
+        try { recognitionRef.current.abort(); } catch (e) {
+          try { recognitionRef.current.stop(); } catch (e2) {}
+        }
+        recognitionRef.current = null;
       }
     };
   }, []);
@@ -254,10 +261,19 @@ export default function PhoneSimulator() {
           activeSessionRef.current.status === 'ACTIVE' &&
           handsFreeMode &&
           !isProcessingTurnRef.current &&
-          !isSpeakingRef.current
+          !isSpeakingRef.current &&
+          recognitionRef.current
         ) {
           setTimeout(() => {
-            try { recognition.start(); } catch (e) {}
+            try {
+              if (
+                activeSessionRef.current &&
+                activeSessionRef.current.status === 'ACTIVE' &&
+                recognitionRef.current
+              ) {
+                recognition.start();
+              }
+            } catch (e) {}
           }, 300);
         } else if (!isSpeakingRef.current && !isProcessingTurnRef.current) {
           setCallPhase('IDLE');
@@ -539,33 +555,51 @@ export default function PhoneSimulator() {
 
   // End Call Handler
   const handleEndCall = async () => {
+    // 1. Immediately invalidate session refs and state flags so no async mic restart can occur
+    activeSessionRef.current = null;
     isInterruptedRef.current = true;
     isSpeakingRef.current = false;
     isProcessingTurnRef.current = false;
 
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    if (ttsSafetyTimeoutRef.current) clearTimeout(ttsSafetyTimeoutRef.current);
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (e) {}
+    // 2. Immediately stop Speech Synthesis (TTS)
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+    if (ttsSafetyTimeoutRef.current) {
+      clearTimeout(ttsSafetyTimeoutRef.current);
+      ttsSafetyTimeoutRef.current = null;
     }
 
-    if (!session) return;
-    setLoading(true);
+    // 3. Immediately abort & stop Speech Recognition (Microphone)
+    if (recognitionRef.current) {
+      const rec = recognitionRef.current;
+      recognitionRef.current = null;
+      try { rec.abort(); } catch (e) {
+        try { rec.stop(); } catch (e2) {}
+      }
+    }
+
+    const currentSess = session;
+
+    // 4. Synchronously update UI states to IDLE & cleared session
+    setSession(null);
     setCallPhase('IDLE');
+    setLoading(false);
+    setError(null);
+    setVoiceUtterance('');
 
-    try {
-      const data = await endCallSession(session.session_id);
-      setSession(data);
-      activeSessionRef.current = null;
+    setCallHistory((prev) => [
+      ...prev,
+      { type: 'SYSTEM', text: 'Call Terminated.', time: new Date().toLocaleTimeString() }
+    ]);
 
-      setCallHistory((prev) => [
-        ...prev,
-        { type: 'SYSTEM', text: 'Call Terminated.', time: new Date().toLocaleTimeString() }
-      ]);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+    // 5. Asynchronously notify backend if valid session existed
+    if (currentSess && currentSess.session_id && typeof currentSess.session_id === 'number') {
+      try {
+        await endCallSession(currentSess.session_id);
+      } catch (err) {
+        console.info('Backend call session cleanup handled:', err);
+      }
     }
   };
 
@@ -835,8 +869,8 @@ export default function PhoneSimulator() {
             </button>
             <button
               onClick={handleEndCall}
-              disabled={loading || !session || session?.status !== 'ACTIVE'}
-              className="py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl font-extrabold text-xs transition shadow-md flex items-center justify-center gap-1.5"
+              disabled={!session && callPhase === 'IDLE'}
+              className="py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl font-extrabold text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <PhoneOff className="w-4 h-4" />
               <span>END CALL</span>

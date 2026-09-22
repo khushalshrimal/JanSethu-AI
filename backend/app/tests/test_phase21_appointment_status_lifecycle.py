@@ -256,5 +256,27 @@ class TestPhase21AppointmentStatusLifecycle(unittest.TestCase):
         apt2 = next(a for a in list2 if a.id == res.id)
         self.assertEqual(apt2.status, AppointmentStatus.COMPLETED)
 
+    # 17. Unauthenticated/Guest cancellation allows canceling without token
+    def test_17_guest_unauthenticated_cancellation(self):
+        res = self._create_test_appointment(26)
+        cancel_res = AppointmentService.cancel_appointment(
+            self.db,
+            res.id,
+            cancel_in=AppointmentCancelRequest(reason="Guest cancellation"),
+            current_user=None
+        )
+        self.assertEqual(cancel_res.status, AppointmentStatus.CANCELLED)
+
+        # Verify via lookup
+        found = AppointmentService.get_by_confirmation_code(self.db, res.confirmation_code, current_user=None)
+        self.assertEqual(found.status, AppointmentStatus.CANCELLED)
+
+    # 18. Unauthenticated get_appointment_by_id succeeds
+    def test_18_guest_unauthenticated_get_appointment(self):
+        res = self._create_test_appointment(27)
+        fetched = AppointmentService.get_appointment_by_id(self.db, res.id, current_user=None)
+        self.assertEqual(fetched.id, res.id)
+        self.assertEqual(fetched.confirmation_code, res.confirmation_code)
+
 if __name__ == "__main__":
     unittest.main()

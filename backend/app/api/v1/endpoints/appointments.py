@@ -76,7 +76,7 @@ def get_appointment_by_confirmation_code(
 def get_appointment(
     appointment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Object-Level Authorization Appointment Detail Endpoint.
@@ -87,7 +87,7 @@ def get_appointment(
 def get_appointment_visit_status(
     appointment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Get real-time visit status & queue token for appointment.
@@ -98,7 +98,7 @@ def get_appointment_visit_status(
 def check_in_appointment(
     appointment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Perform Patient OPD Check-In.
@@ -112,7 +112,7 @@ def cancel_appointment(
     appointment_id: int,
     cancel_in: AppointmentCancelRequest = AppointmentCancelRequest(),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Cancel an existing appointment with a reason.
@@ -125,7 +125,7 @@ def reschedule_appointment(
     appointment_id: int,
     reschedule_in: AppointmentRescheduleRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Reschedule an existing appointment to a newly selected date/time slot.

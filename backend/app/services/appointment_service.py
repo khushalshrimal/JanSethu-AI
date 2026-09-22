@@ -278,7 +278,7 @@ class AppointmentService:
         return cls.format_appointment_response(db, apt)
 
     @classmethod
-    def get_appointment_by_id(cls, db: Session, appointment_id: int, current_user: User) -> AppointmentResponse:
+    def get_appointment_by_id(cls, db: Session, appointment_id: int, current_user: Optional[User] = None) -> AppointmentResponse:
         apt = AppointmentRepository.get_by_id(db, appointment_id)
         if not apt:
             raise HTTPException(
@@ -287,19 +287,20 @@ class AppointmentService:
             )
 
         # Object-level authorization
-        if current_user.role == UserRole.CUSTOMER:
-            if not current_user.patient_profile or apt.patient_id != current_user.patient_profile.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied. You cannot view another customer's appointment."}
-                )
-        elif current_user.role == UserRole.PROVIDER:
-            prov_doc = current_user.doctor_profile
-            if not prov_doc or not (apt.doctor_id == prov_doc.id or apt.facility_id == prov_doc.facility_id):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied. Providers can only view appointments assigned to their doctor or facility."}
-                )
+        if current_user:
+            if current_user.role == UserRole.CUSTOMER:
+                if not current_user.patient_profile or apt.patient_id != current_user.patient_profile.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied. You cannot view another customer's appointment."}
+                    )
+            elif current_user.role == UserRole.PROVIDER:
+                prov_doc = current_user.doctor_profile
+                if not prov_doc or not (apt.doctor_id == prov_doc.id or apt.facility_id == prov_doc.facility_id):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied. Providers can only view appointments assigned to their doctor or facility."}
+                    )
 
         return cls.format_appointment_response(db, apt)
 
@@ -318,7 +319,7 @@ class AppointmentService:
 
     @classmethod
     def cancel_appointment(
-        cls, db: Session, appointment_id: int, cancel_in: AppointmentCancelRequest, current_user: User
+        cls, db: Session, appointment_id: int, cancel_in: AppointmentCancelRequest = AppointmentCancelRequest(), current_user: Optional[User] = None
     ) -> AppointmentResponse:
         apt = AppointmentRepository.get_by_id(db, appointment_id)
         if not apt:
@@ -328,19 +329,20 @@ class AppointmentService:
             )
 
         # Authorization
-        if current_user.role == UserRole.CUSTOMER:
-            if not current_user.patient_profile or apt.patient_id != current_user.patient_profile.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
-                )
-        elif current_user.role == UserRole.PROVIDER:
-            prov_doc = current_user.doctor_profile
-            if not prov_doc or not (apt.doctor_id == prov_doc.id or apt.facility_id == prov_doc.facility_id):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
-                )
+        if current_user:
+            if current_user.role == UserRole.CUSTOMER:
+                if not current_user.patient_profile or apt.patient_id != current_user.patient_profile.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
+                    )
+            elif current_user.role == UserRole.PROVIDER:
+                prov_doc = current_user.doctor_profile
+                if not prov_doc or not (apt.doctor_id == prov_doc.id or apt.facility_id == prov_doc.facility_id):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
+                    )
 
         # Check status & lifecycle
         if apt.status == AppointmentStatus.CANCELLED:
@@ -359,21 +361,24 @@ class AppointmentService:
                 detail={"code": "INVALID_STATUS_TRANSITION", "message": "NO_SHOW appointments cannot be cancelled."}
             )
 
+        reason_str = cancel_in.reason if hasattr(cancel_in, "reason") and cancel_in.reason else str(cancel_in)
+
         old_st = apt.status
         apt.status = AppointmentStatus.CANCELLED
-        apt.cancellation_reason = cancel_in.reason
+        apt.cancellation_reason = reason_str
         apt.cancelled_at = datetime.utcnow()
         db.commit()
 
         # Audit log
+        actor_id = current_user.id if current_user else (apt.patient.user_id if (apt.patient and getattr(apt.patient, "user_id", None)) else 1)
         AppointmentRepository.create_audit_entry(
             db=db,
             appointment_id=apt.id,
-            actor_id=current_user.id,
+            actor_id=actor_id,
             event_type="APPOINTMENT_CANCELLED",
             old_status=old_st.value if old_st else None,
             new_status=AppointmentStatus.CANCELLED.value,
-            notes=f"Cancelled by user {current_user.id}. Reason: {cancel_in.reason}"
+            notes=f"Cancelled. Reason: {reason_str}"
         )
 
         # Notification
@@ -384,7 +389,7 @@ class AppointmentService:
 
     @classmethod
     def reschedule_appointment(
-        cls, db: Session, appointment_id: int, reschedule_in: AppointmentRescheduleRequest, current_user: User
+        cls, db: Session, appointment_id: int, reschedule_in: AppointmentRescheduleRequest, current_user: Optional[User] = None
     ) -> AppointmentResponse:
         apt = AppointmentRepository.get_by_id(db, appointment_id)
         if not apt:
@@ -394,19 +399,20 @@ class AppointmentService:
             )
 
         # Authorization
-        if current_user.role == UserRole.CUSTOMER:
-            if not current_user.patient_profile or apt.patient_id != current_user.patient_profile.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
-                )
-        elif current_user.role == UserRole.PROVIDER:
-            prov_doc = current_user.doctor_profile
-            if not prov_doc or not (apt.doctor_id == prov_doc.id or apt.facility_id == prov_doc.facility_id):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
-                )
+        if current_user:
+            if current_user.role == UserRole.CUSTOMER:
+                if not current_user.patient_profile or apt.patient_id != current_user.patient_profile.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
+                    )
+            elif current_user.role == UserRole.PROVIDER:
+                prov_doc = current_user.doctor_profile
+                if not prov_doc or not (apt.doctor_id == prov_doc.id or apt.facility_id == prov_doc.facility_id):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
+                    )
 
         # Check existing state
         if apt.status in [AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW]:
@@ -475,10 +481,11 @@ class AppointmentService:
         db.commit()
 
         # Audit entry
+        actor_id = current_user.id if current_user else (apt.patient.user_id if (apt.patient and getattr(apt.patient, "user_id", None)) else 1)
         AppointmentRepository.create_audit_entry(
             db=db,
             appointment_id=apt.id,
-            actor_id=current_user.id,
+            actor_id=actor_id,
             event_type="APPOINTMENT_RESCHEDULED",
             old_status=apt.status.value,
             new_status=apt.status.value,
