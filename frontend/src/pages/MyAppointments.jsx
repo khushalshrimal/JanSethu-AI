@@ -61,7 +61,7 @@ export default function MyAppointments() {
       const result = await lookupAppointmentByConfirmationCode(codeQuery.trim());
       setLookupResult(result);
     } catch (err) {
-      setLookupError(err.response?.data?.detail || 'No appointment found matching this confirmation code.');
+      setLookupError(err.message || err.response?.data?.detail || 'No appointment found matching this confirmation code.');
     } finally {
       setLookupLoading(false);
     }
@@ -146,7 +146,7 @@ export default function MyAppointments() {
   };
 
   const filteredAppointments = appointments.filter((appt) => {
-    if (activeTab === 'UPCOMING') return appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN';
+    if (activeTab === 'UPCOMING') return ['PENDING', 'BOOKED', 'CONFIRMED', 'CHECKED_IN'].includes(appt.status);
     if (activeTab === 'COMPLETED') return appt.status === 'COMPLETED';
     if (activeTab === 'CANCELLED') return appt.status === 'CANCELLED';
     return true;
@@ -214,12 +214,12 @@ export default function MyAppointments() {
                 </span>
               </div>
               <p className="font-bold text-slate-800">
-                Dr. {lookupResult.doctor_name} ({lookupResult.department_name})
+                Dr. {lookupResult.doctor_name || lookupResult.doctor?.name || 'OPD Specialist'} ({lookupResult.department_name || lookupResult.department?.name || 'General OPD'})
               </p>
               <p className="text-slate-600">
-                Date: <strong>{lookupResult.date}</strong> at <strong>{lookupResult.start_time} - {lookupResult.end_time}</strong>
+                Date: <strong>{lookupResult.date || lookupResult.appointment_date}</strong> at <strong>{lookupResult.start_time} - {lookupResult.end_time}</strong>
               </p>
-              <p className="text-slate-500 text-[11px]">Patient: {lookupResult.patient_name} ({lookupResult.patient_phone})</p>
+              <p className="text-slate-500 text-[11px]">Patient: {lookupResult.patient_name || lookupResult.patient?.name || 'Patient'} ({lookupResult.patient_phone || lookupResult.patient?.phone || ''})</p>
               <button
                 onClick={() => navigate('/confirmation', { state: { appointment: lookupResult } })}
                 className="mt-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-[11px] font-bold inline-flex items-center gap-1"
@@ -266,7 +266,8 @@ export default function MyAppointments() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredAppointments.map((appt) => {
-                const isConfirmed = appt.status === 'CONFIRMED' || appt.status === 'CHECKED_IN';
+                const isUpcoming = ['PENDING', 'BOOKED', 'CONFIRMED', 'CHECKED_IN'].includes(appt.status);
+                const isCompleted = appt.status === 'COMPLETED';
                 const isCancelled = appt.status === 'CANCELLED';
 
                 return (
@@ -293,8 +294,10 @@ export default function MyAppointments() {
                             </span>
                           )}
                           <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
-                            isConfirmed
+                            isUpcoming
                               ? 'bg-emerald-100 text-emerald-900'
+                              : isCompleted
+                              ? 'bg-purple-100 text-purple-900'
                               : isCancelled
                               ? 'bg-rose-100 text-rose-900'
                               : 'bg-slate-100 text-slate-800'
@@ -305,19 +308,19 @@ export default function MyAppointments() {
                       </div>
 
                       <h3 className="font-black text-slate-900 text-base leading-tight">
-                        Dr. {appt.doctor_name || 'OPD Doctor'}
+                        Dr. {appt.doctor_name || appt.doctor?.name || 'OPD Doctor'}
                       </h3>
-                      <p className="text-xs font-bold text-sky-700">{appt.department_name}</p>
+                      <p className="text-xs font-bold text-sky-700">{appt.department_name || appt.department?.name}</p>
 
                       <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{appt.facility_name}</span>
+                        <span>{appt.facility_name || appt.facility?.name}</span>
                       </p>
 
                       <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                         <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                           <span className="text-[10px] text-slate-400 uppercase font-bold">Date</span>
-                          <p className="font-extrabold text-slate-800">{appt.date}</p>
+                          <p className="font-extrabold text-slate-800">{appt.date || appt.appointment_date}</p>
                         </div>
                         <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                           <span className="text-[10px] text-slate-400 uppercase font-bold">Time Slot</span>
@@ -336,7 +339,7 @@ export default function MyAppointments() {
                           <span>Ticket</span>
                         </button>
 
-                        {isConfirmed && (!appt.queue_token || appt.visit_status === 'NOT_CHECKED_IN') && (
+                        {isUpcoming && (!appt.queue_token || appt.visit_status === 'NOT_CHECKED_IN') && (
                           <button
                             onClick={() => handleCheckIn(appt.id)}
                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1 shadow-sm"
@@ -347,7 +350,7 @@ export default function MyAppointments() {
                         )}
                       </div>
 
-                      {isConfirmed && (
+                      {isUpcoming && (
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleOpenRescheduleModal(appt)}
@@ -383,7 +386,7 @@ export default function MyAppointments() {
               Cancel Appointment
             </h3>
             <p className="text-xs text-slate-600">
-              Are you sure you want to cancel appointment <strong>{cancelingAppt.confirmation_code}</strong> for Dr. {cancelingAppt.doctor_name}?
+              Are you sure you want to cancel appointment <strong>{cancelingAppt.confirmation_code}</strong> for Dr. {cancelingAppt.doctor_name || cancelingAppt.doctor?.name}?
             </p>
 
             <div>
@@ -426,7 +429,7 @@ export default function MyAppointments() {
               Reschedule OPD Slot
             </h3>
             <p className="text-xs text-slate-600">
-              Rescheduling for Dr. <strong>{reschedulingAppt.doctor_name}</strong> (Code: {reschedulingAppt.confirmation_code})
+              Rescheduling for Dr. <strong>{reschedulingAppt.doctor_name || reschedulingAppt.doctor?.name}</strong> (Code: {reschedulingAppt.confirmation_code})
             </p>
 
             {rescheduleError && (

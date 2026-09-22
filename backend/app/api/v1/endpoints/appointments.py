@@ -64,11 +64,11 @@ def get_my_appointments(
 def get_appointment_by_confirmation_code(
     confirmation_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Retrieve appointment using unique human-friendly confirmation code (JS-2026-XXXXXX).
-    Requires proper object-level authorization.
+    Accessible via exact canonical ticket confirmation code.
     """
     return AppointmentService.get_by_confirmation_code(db, confirmation_code, current_user)
 

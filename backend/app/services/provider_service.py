@@ -82,8 +82,15 @@ class ProviderService:
                     detail="Providers can only manage appointments for their assigned doctor profile."
                 )
 
+        from app.services.appointment_service import AppointmentService
         old_status = apt.status
+        AppointmentService.validate_status_transition(old_status, req.status)
         apt.status = req.status
+        if req.status == AppointmentStatus.COMPLETED:
+            apt.visit_status = "COMPLETED"
+            apt.consultation_completed_at = datetime.utcnow()
+        elif req.status == AppointmentStatus.CANCELLED:
+            apt.cancelled_at = datetime.utcnow()
         apt.updated_at = datetime.utcnow()
 
         # Audit Log

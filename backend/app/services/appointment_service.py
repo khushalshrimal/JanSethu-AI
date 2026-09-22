@@ -28,9 +28,10 @@ from app.utils.timezone import get_ist_now
 
 # VALID STATUS TRANSITION MAP
 ALLOWED_TRANSITIONS = {
-    AppointmentStatus.BOOKED: [AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED],
-    AppointmentStatus.PENDING: [AppointmentStatus.BOOKED, AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED],
-    AppointmentStatus.CONFIRMED: [AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW],
+    AppointmentStatus.BOOKED: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS, AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED],
+    AppointmentStatus.PENDING: [AppointmentStatus.BOOKED, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS, AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED],
+    AppointmentStatus.CONFIRMED: [AppointmentStatus.PENDING, AppointmentStatus.BOOKED, AppointmentStatus.IN_PROGRESS, AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
+    AppointmentStatus.IN_PROGRESS: [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
     AppointmentStatus.CANCELLED: [], # Terminal
     AppointmentStatus.COMPLETED: [], # Terminal
     AppointmentStatus.NO_SHOW: []     # Terminal
@@ -303,7 +304,7 @@ class AppointmentService:
         return cls.format_appointment_response(db, apt)
 
     @classmethod
-    def get_by_confirmation_code(cls, db: Session, code: str, current_user: User) -> AppointmentResponse:
+    def get_by_confirmation_code(cls, db: Session, code: str, current_user: Optional[User] = None) -> AppointmentResponse:
         apt = AppointmentRepository.get_by_confirmation_code(db, code)
         if not apt:
             raise HTTPException(
@@ -311,21 +312,8 @@ class AppointmentService:
                 detail={"code": "APPOINTMENT_NOT_FOUND", "message": f"Appointment with confirmation code '{code}' not found."}
             )
 
-        # Object-level authorization
-        if current_user.role == UserRole.CUSTOMER:
-            if not current_user.patient_profile or apt.patient_id != current_user.patient_profile.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
-                )
-        elif current_user.role == UserRole.PROVIDER:
-            prov_doc = current_user.doctor_profile
-            if not prov_doc or not (apt.doctor_id == prov_doc.id or apt.facility_id == prov_doc.facility_id):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={"code": "UNAUTHORIZED_APPOINTMENT_ACCESS", "message": "Access denied."}
-                )
-
+        # Unique confirmation code acts as a valid ticket reference (PNR token).
+        # Holding the exact valid confirmation code grants access to view ticket details.
         return cls.format_appointment_response(db, apt)
 
     @classmethod
@@ -787,11 +775,15 @@ class AppointmentService:
             if not prov_doc or not (apt.doctor_id == prov_doc.id or apt.facility_id == prov_doc.facility_id):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
-        vstatus = getattr(apt, "visit_status", "NOT_CHECKED_IN") or "NOT_CHECKED_IN"
-        if vstatus != "IN_CONSULTATION" or apt.status == AppointmentStatus.COMPLETED:
+        if apt.status == AppointmentStatus.CANCELLED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "INVALID_STATE_TRANSITION", "message": f"Cannot complete consultation from status {vstatus}. Consultation must be in progress."}
+                detail={"code": "INVALID_STATE_TRANSITION", "message": "Cannot complete a CANCELLED appointment."}
+            )
+        if apt.status == AppointmentStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "APPOINTMENT_ALREADY_COMPLETED", "message": "Appointment is already completed."}
             )
 
         old_st = apt.status

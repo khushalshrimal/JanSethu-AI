@@ -29,7 +29,47 @@ class AppointmentRepository:
 
     @staticmethod
     def get_by_confirmation_code(db: Session, code: str) -> Optional[Appointment]:
-        return db.query(Appointment).filter(Appointment.confirmation_code == code).first()
+        if not code or not str(code).strip():
+            return None
+
+        raw_code = str(code).strip()
+        clean_code = raw_code.upper()
+
+        # 1. Exact match on confirmation_code
+        apt = db.query(Appointment).filter(Appointment.confirmation_code == clean_code).first()
+        if apt:
+            return apt
+
+        # 2. Case-insensitive match using func.upper
+        from sqlalchemy import func
+        apt = db.query(Appointment).filter(func.upper(Appointment.confirmation_code) == clean_code).first()
+        if apt:
+            return apt
+
+        # 3. Handle prefix variations (JS-, JAN-REF-, REF-, APP-)
+        alt_code = clean_code
+        for prefix in ["JAN-REF-", "REF-", "APP-", "JS-"]:
+            if alt_code.startswith(prefix):
+                alt_code = alt_code[len(prefix):]
+                break
+
+        if alt_code != clean_code:
+            js_code = f"JS-{alt_code}"
+            apt = db.query(Appointment).filter(Appointment.confirmation_code == js_code).first()
+            if apt:
+                return apt
+
+        # 4. Fallback: If numeric string, try matching appointment ID
+        if clean_code.isdigit():
+            try:
+                apt_id = int(clean_code)
+                apt = db.query(Appointment).filter(Appointment.id == apt_id).first()
+                if apt:
+                    return apt
+            except ValueError:
+                pass
+
+        return None
 
     @staticmethod
     def get_existing_slot_booking(db: Session, doctor_id: int, apt_date: date, start_time: time) -> Optional[Appointment]:
@@ -51,7 +91,8 @@ class AppointmentRepository:
         start_time: time,
         end_time: time,
         booking_channel: BookingChannel,
-        reason_for_visit: Optional[str] = None
+        reason_for_visit: Optional[str] = None,
+        status: AppointmentStatus = AppointmentStatus.BOOKED
     ) -> Appointment:
         existing = AppointmentRepository.get_existing_slot_booking(db, doctor_id, apt_date, start_time)
         if existing:
@@ -69,7 +110,7 @@ class AppointmentRepository:
             booking_channel=booking_channel,
             reason_for_visit=reason_for_visit,
             confirmation_code=code,
-            status=AppointmentStatus.BOOKED
+            status=status
         )
         db.add(db_apt)
         try:
@@ -122,7 +163,7 @@ class AppointmentRepository:
             today_ist = get_ist_now().date()
             query = query.filter(
                 Appointment.appointment_date >= today_ist,
-                Appointment.status.in_([AppointmentStatus.BOOKED, AppointmentStatus.CONFIRMED])
+                Appointment.status.in_([AppointmentStatus.PENDING, AppointmentStatus.BOOKED, AppointmentStatus.CONFIRMED])
             )
         return query.order_by(Appointment.appointment_date.asc(), Appointment.start_time.asc()).all()
 

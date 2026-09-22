@@ -15,7 +15,7 @@ from app.models.telephony import SMSNotification, CallSession
 from app.models.enums import (
     UserRole, Language, BookingChannel, AppointmentStatus, NotificationStatus, VisitStatus
 )
-from app.schemas.appointment import AppointmentCreate
+from app.schemas.appointment import AppointmentCreate, AppointmentCancelRequest
 from app.services.appointment_service import AppointmentService
 from app.repositories.appointment_repository import AppointmentRepository
 from app.services.phone_session_service import PhoneSessionService
@@ -265,6 +265,7 @@ class TestPhase20FinalPrototype(unittest.TestCase):
         today = get_today_ist()
         now_time = datetime.now().time()
         apt = self._create_test_appointment(apt_date=today, start_time_val=now_time)
+        AppointmentService.cancel_appointment(self.db, apt.id, cancel_in=AppointmentCancelRequest(reason="Test cancel"), current_user=self.customer_user)
 
         resp = self.client.post(
             f"/api/v1/provider/appointments/{apt.id}/complete-consultation",

@@ -31,15 +31,18 @@ apiClient.interceptors.response.use(
     
     // Standardize error message extraction
     const serverError = error.response?.data?.error;
+    const detailObj = error.response?.data?.detail;
+    const detailMessage = typeof detailObj === 'string' ? detailObj : (detailObj?.message || detailObj?.code);
     const userMessage = serverError?.message 
-      || error.response?.data?.detail 
+      || detailMessage 
       || (error.code === 'ERR_NETWORK' 
           ? 'Unable to reach JanSethu servers. Please check your network connection.' 
           : 'An unexpected error occurred. Please try again.');
           
     const customError = new Error(userMessage);
-    customError.code = serverError?.code || error.code || 'UNKNOWN_ERROR';
+    customError.code = serverError?.code || detailObj?.code || error.code || 'UNKNOWN_ERROR';
     customError.status = error.response?.status || 500;
+    customError.response = error.response;
     customError.originalError = error;
     
     return Promise.reject(customError);

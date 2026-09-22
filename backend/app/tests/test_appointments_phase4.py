@@ -340,6 +340,24 @@ class TestPhase4Appointments(unittest.TestCase):
         code_res = AppointmentService.get_by_confirmation_code(self.db, res.confirmation_code, self.customer1)
         self.assertEqual(code_res.id, res.id)
 
+    def test_get_by_confirmation_code_variations(self):
+        apt_in = AppointmentCreate(doctor_id=self.doctor.id, appointment_date=self.valid_future_date, start_time=time(11, 0))
+        res = AppointmentService.book_appointment(self.db, apt_in, self.customer1)
+        raw_code = res.confirmation_code
+
+        # Test lowercase & whitespace trimming
+        res_lower = AppointmentService.get_by_confirmation_code(self.db, f"  {raw_code.lower()}  ")
+        self.assertEqual(res_lower.id, res.id)
+
+        # Test prefix variation JAN-REF-
+        code_without_prefix = raw_code.replace("JS-", "")
+        res_prefix = AppointmentService.get_by_confirmation_code(self.db, f"JAN-REF-{code_without_prefix}")
+        self.assertEqual(res_prefix.id, res.id)
+
+        # Test guest/unauthenticated lookup (current_user=None)
+        res_guest = AppointmentService.get_by_confirmation_code(self.db, raw_code, current_user=None)
+        self.assertEqual(res_guest.id, res.id)
+
     def test_provider_appointments_view(self):
         apt_in = AppointmentCreate(doctor_id=self.doctor.id, appointment_date=self.valid_future_date, start_time=time(10, 0))
         AppointmentService.book_appointment(self.db, apt_in, self.customer1)
