@@ -14,17 +14,20 @@ export default function PhoneSimulator() {
   const [inputMode, setInputMode] = useState('VOICE'); // 'VOICE' or 'DTMF'
   const [voiceUtterance, setVoiceUtterance] = useState('');
   const [lastNlu, setLastNlu] = useState(null);
-  const [callPhase, setCallPhase] = useState('IDLE'); // 'IDLE' | 'CONNECTING' | 'ASSISTANT_SPEAKING' | 'INTERRUPTED' | 'USER_SPEAKING' | 'LISTENING' | 'PROCESSING'
+  const [callPhase, setCallPhase] = useState('IDLE'); // 'IDLE' | 'CONNECTING' | 'JANSETHU_SPEAKING' | 'INTERRUPTED' | 'LISTENING' | 'USER_SPEAKING' | 'PROCESSING'
   const [handsFreeMode, setHandsFreeMode] = useState(true);
 
   const recognitionRef = useRef(null);
   const activeSessionRef = useRef(null);
   activeSessionRef.current = session;
 
-  // Phase 5 Continuous Microphone & Barge-In Interruption State Refs
+  // Phase 5 & 8 Continuous Voice & Barge-In State Refs
   const isSpeakingRef = useRef(false);
   const isInterruptedRef = useRef(false);
   const isProcessingTurnRef = useRef(false);
+  const currentUtteranceRef = useRef(null);
+  const ttsSafetyTimeoutRef = useRef(null);
+  const lastSpokenPromptRef = useRef('');
 
   // Cleanup speech synthesis & recognition on unmount
   useEffect(() => {
@@ -32,45 +35,56 @@ export default function PhoneSimulator() {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
+      if (ttsSafetyTimeoutRef.current) {
+        clearTimeout(ttsSafetyTimeoutRef.current);
+      }
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (e) {}
       }
     };
   }, []);
 
-  const currentUtteranceRef = useRef(null);
-
-  // Helper: Speak TTS Prompt to Caller with Barge-In Interruption Support & Chrome/Edge GC Protection
+  // Safe TTS Speak Helper with Auto-Mic Transition & Chrome GC Protection
   const speakPrompt = (text, language = 'HI', onComplete) => {
-    if (!('speechSynthesis' in window)) {
+    if (!text || !text.trim()) {
+      isSpeakingRef.current = false;
       if (onComplete) onComplete();
       return;
     }
 
-    // Reset speech interruption flag for new utterance
+    lastSpokenPromptRef.current = text.toLowerCase().trim();
+
+    if (!('speechSynthesis' in window)) {
+      isSpeakingRef.current = false;
+      setCallPhase('LISTENING');
+      if (onComplete) onComplete();
+      return;
+    }
+
+    // Reset speech interruption flag
     isInterruptedRef.current = false;
     isSpeakingRef.current = true;
+    setCallPhase('JANSETHU_SPEAKING');
 
-    // Ensure SpeechSynthesis is active & unpaused on Windows Chrome/Edge
+    if (ttsSafetyTimeoutRef.current) {
+      clearTimeout(ttsSafetyTimeoutRef.current);
+    }
+
     try {
       window.speechSynthesis.cancel();
       window.speechSynthesis.resume();
     } catch (e) {}
 
-    setCallPhase('ASSISTANT_SPEAKING');
-
     const cleanText = text.replace(/\[[A-Z]{2}\]\s*/g, '').replace(/[*#]/g, '');
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    currentUtteranceRef.current = utterance; // Prevent JS garbage collection from silencing audio mid-sentence
+    currentUtteranceRef.current = utterance;
 
-    // Pick localized voice language code
     const langCode = language === 'MR' ? 'mr-IN' : language === 'EN' ? 'en-US' : 'hi-IN';
     utterance.lang = langCode;
-    utterance.rate = 0.95; // Slightly clear and deliberate for telephony simulation
+    utterance.rate = 0.95;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
 
-    // Try selecting native Hindi/Marathi/English browser voice
     const voices = window.speechSynthesis.getVoices();
     if (voices.length > 0) {
       const matchVoice = voices.find(v => v.lang.toLowerCase().includes(langCode.toLowerCase())) ||
@@ -80,43 +94,62 @@ export default function PhoneSimulator() {
       if (matchVoice) utterance.voice = matchVoice;
     }
 
-    utterance.onend = () => {
+    const handleSpeechEnd = () => {
+      if (ttsSafetyTimeoutRef.current) {
+        clearTimeout(ttsSafetyTimeoutRef.current);
+      }
       currentUtteranceRef.current = null;
-      // If user interrupted speech, do not trigger normal onend completion logic
+
       if (isInterruptedRef.current) return;
 
       isSpeakingRef.current = false;
-      setCallPhase('IDLE');
-      if (onComplete) onComplete();
+
+      if (activeSessionRef.current && activeSessionRef.current.status === 'ACTIVE') {
+        if (onComplete) {
+          onComplete();
+        } else {
+          startListeningForCaller(language);
+        }
+      } else {
+        setCallPhase('IDLE');
+      }
     };
 
+    utterance.onend = handleSpeechEnd;
     utterance.onerror = (e) => {
       console.warn('SpeechSynthesis error:', e);
-      currentUtteranceRef.current = null;
-      if (isInterruptedRef.current) return;
-
-      isSpeakingRef.current = false;
-      setCallPhase('IDLE');
-      if (onComplete) onComplete();
+      handleSpeechEnd();
     };
 
     try {
       window.speechSynthesis.speak(utterance);
       window.speechSynthesis.resume();
+
+      // Chrome TTS onend safety timeout fallback (1 word ~ 400ms + 2.5s buffer)
+      const estimatedMs = Math.max(3000, (cleanText.length / 12) * 1000 + 2500);
+      ttsSafetyTimeoutRef.current = setTimeout(() => {
+        if (isSpeakingRef.current && !isInterruptedRef.current) {
+          console.info('TTS safety timeout reached, transitioning to listening mode.');
+          handleSpeechEnd();
+        }
+      }, estimatedMs);
     } catch (err) {
       console.error('Speech synthesis speak error:', err);
-    }
-
-    // Keep continuous mic active & listening during speech for instant barge-in detection
-    if (handsFreeMode) {
-      setTimeout(() => {
-        listenForCallerSpeech(language);
-      }, 200);
+      handleSpeechEnd();
     }
   };
 
-  // Helper: Start Continuous Speech Recognition with Instant Barge-In Detection
-  const listenForCallerSpeech = (currentLang = 'HI') => {
+  // Automated Hands-Free Microphone Listener with Continuous Barge-In Detection
+  const startListeningForCaller = (currentLang = 'HI') => {
+    if (!activeSessionRef.current || activeSessionRef.current.status !== 'ACTIVE') {
+      setCallPhase('IDLE');
+      return;
+    }
+
+    if (isProcessingTurnRef.current) {
+      return;
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setCallPhase('IDLE');
       return;
@@ -124,8 +157,7 @@ export default function PhoneSimulator() {
 
     try {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      
-      // Stop prior instance cleanly
+
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (e) {}
       }
@@ -139,12 +171,11 @@ export default function PhoneSimulator() {
       recognition.interimResults = true;
 
       recognition.onstart = () => {
-        if (!isSpeakingRef.current && callPhase !== 'INTERRUPTED') {
+        if (!isSpeakingRef.current && !isProcessingTurnRef.current) {
           setCallPhase('LISTENING');
         }
       };
 
-      // Detect speech onset / sound onset for instant barge-in cancellation
       const handleSpeechOnset = () => {
         if (isSpeakingRef.current) {
           // Instant Barge-In Interruption!
@@ -153,10 +184,13 @@ export default function PhoneSimulator() {
           if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
           }
+          if (ttsSafetyTimeoutRef.current) {
+            clearTimeout(ttsSafetyTimeoutRef.current);
+          }
           setCallPhase('INTERRUPTED');
           setTimeout(() => {
             setCallPhase('USER_SPEAKING');
-          }, 300);
+          }, 200);
         } else if (!isProcessingTurnRef.current) {
           setCallPhase('USER_SPEAKING');
         }
@@ -166,7 +200,6 @@ export default function PhoneSimulator() {
       recognition.onspeechstart = handleSpeechOnset;
 
       recognition.onresult = async (event) => {
-        // If speech output is active when user speaks, trigger instant barge-in
         if (isSpeakingRef.current) {
           handleSpeechOnset();
         }
@@ -182,14 +215,18 @@ export default function PhoneSimulator() {
           }
         }
 
-        const candidateText = finalTranscript.trim() || interimTranscript.trim();
+        const candidateText = (finalTranscript.trim() || interimTranscript.trim()).trim();
         if (!candidateText) return;
 
-        // If we have a final result or substantial text, submit turn to backend
+        // Filter out self-echoes of JanSethu prompt if microphone picked up speaker audio
+        if (lastSpokenPromptRef.current && lastSpokenPromptRef.current.includes(candidateText.toLowerCase())) {
+          return;
+        }
+
         const isFinal = event.results[event.results.length - 1].isFinal;
         if (isFinal && candidateText.length > 0) {
-          if (isProcessingTurnRef.current) return; // Submission guard
-          
+          if (isProcessingTurnRef.current) return;
+
           isProcessingTurnRef.current = true;
           setVoiceUtterance(candidateText);
           setCallPhase('PROCESSING');
@@ -207,29 +244,36 @@ export default function PhoneSimulator() {
           console.warn('Speech recognition error:', err.error);
         }
         if (!isProcessingTurnRef.current && !isSpeakingRef.current) {
-          setCallPhase('IDLE');
+          setCallPhase('LISTENING');
         }
       };
 
       recognition.onend = () => {
-        // If call is active and hands-free, seamlessly restart mic loop if not currently processing or speaking
-        if (activeSessionRef.current && activeSessionRef.current.status === 'ACTIVE' && handsFreeMode && !isProcessingTurnRef.current && !isSpeakingRef.current) {
-          try {
-            recognition.start();
-          } catch (e) {}
+        if (
+          activeSessionRef.current &&
+          activeSessionRef.current.status === 'ACTIVE' &&
+          handsFreeMode &&
+          !isProcessingTurnRef.current &&
+          !isSpeakingRef.current
+        ) {
+          setTimeout(() => {
+            try { recognition.start(); } catch (e) {}
+          }, 300);
         } else if (!isSpeakingRef.current && !isProcessingTurnRef.current) {
-          setCallPhase((prev) => (prev === 'LISTENING' || prev === 'USER_SPEAKING' ? 'IDLE' : prev));
+          setCallPhase('IDLE');
         }
       };
 
       recognition.start();
     } catch (err) {
       console.error('Failed to start speech recognition:', err);
-      setCallPhase('IDLE');
+      if (!isSpeakingRef.current && !isProcessingTurnRef.current) {
+        setCallPhase('IDLE');
+      }
     }
   };
 
-  // Centralized Voice Turn Handler
+  // Centralized Voice Turn Handler (Submits Speech to Backend -> Speaks Response -> Restarts Mic Loop)
   const processVoiceTurn = async (spokenText) => {
     const curSess = activeSessionRef.current;
     if (!curSess || curSess.status !== 'ACTIVE') {
@@ -237,9 +281,11 @@ export default function PhoneSimulator() {
       return;
     }
 
-    // Ensure any leftover TTS playback is halted
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
+    }
+    if (ttsSafetyTimeoutRef.current) {
+      clearTimeout(ttsSafetyTimeoutRef.current);
     }
 
     setLoading(true);
@@ -251,7 +297,7 @@ export default function PhoneSimulator() {
         const data = await sendConversationMessage(
           curSess.conv_session_id || `conv-${curSess.session_id}`,
           spokenText,
-          curSess.language || 'hi'
+          curSess.language || 'HI'
         );
 
         const updatedSess = {
@@ -286,11 +332,10 @@ export default function PhoneSimulator() {
 
         isProcessingTurnRef.current = false;
 
+        // JanSethu speaks assistant response automatically, then opens microphone!
         speakPrompt(data.assistant_message, data.language || 'HI', () => {
           if (handsFreeMode && updatedSess.status === 'ACTIVE') {
-            setTimeout(() => {
-              listenForCallerSpeech(updatedSess.language || 'HI');
-            }, 300);
+            startListeningForCaller(updatedSess.language || 'HI');
           }
         });
         return;
@@ -329,12 +374,10 @@ export default function PhoneSimulator() {
 
       isProcessingTurnRef.current = false;
 
-      // Speak TTS response and keep continuous hands-free voice loop ready
+      // Speak TTS response and automatically restart continuous mic loop
       speakPrompt(data.voice_playback || data.prompt_text, data.language, () => {
         if (handsFreeMode && updatedSess.status === 'ACTIVE') {
-          setTimeout(() => {
-            listenForCallerSpeech(updatedSess.language);
-          }, 300);
+          startListeningForCaller(updatedSess.language);
         }
       });
     } catch (err) {
@@ -346,7 +389,7 @@ export default function PhoneSimulator() {
     }
   };
 
-  // 1-Click Call Initiation
+  // 1-Click Call Initiation — JanSethu Speaks Initial Greeting Automatically!
   const handleStartCall = async (e) => {
     if (e) e.preventDefault();
     if (!callerPhone.trim()) return;
@@ -380,11 +423,10 @@ export default function PhoneSimulator() {
           { type: 'SYSTEM', text: initialPrompt, time: new Date().toLocaleTimeString() }
         ]);
 
+        // JanSethu speaks initial greeting automatically on call start, then mic opens!
         speakPrompt(initialPrompt, 'HI', () => {
           if (handsFreeMode) {
-            setTimeout(() => {
-              listenForCallerSpeech('HI');
-            }, 300);
+            startListeningForCaller('HI');
           }
         });
         return;
@@ -398,12 +440,9 @@ export default function PhoneSimulator() {
         { type: 'SYSTEM', text: data.voice_playback, time: new Date().toLocaleTimeString() }
       ]);
 
-      // Unlocks browser audio & starts true hands-free voice loop with continuous mic & barge-in!
       speakPrompt(data.voice_playback || data.prompt_text, data.language, () => {
         if (handsFreeMode) {
-          setTimeout(() => {
-            listenForCallerSpeech(data.language);
-          }, 300);
+          startListeningForCaller(data.language);
         }
       });
     } catch (err) {
@@ -418,7 +457,6 @@ export default function PhoneSimulator() {
   const handleKeyPress = async (key) => {
     if (!session || session.status !== 'ACTIVE') return;
 
-    // Instant barge-in cancellation on keypress as well!
     isInterruptedRef.current = true;
     isSpeakingRef.current = false;
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
@@ -446,9 +484,7 @@ export default function PhoneSimulator() {
 
       speakPrompt(data.voice_playback || data.prompt_text, data.language, () => {
         if (handsFreeMode && data.status === 'ACTIVE') {
-          setTimeout(() => {
-            listenForCallerSpeech(data.language);
-          }, 300);
+          startListeningForCaller(data.language);
         }
       });
     } catch (err) {
@@ -468,7 +504,6 @@ export default function PhoneSimulator() {
     const text = voiceUtterance.trim();
     setVoiceUtterance('');
 
-    // Trigger barge-in cancellation if assistant is currently speaking
     if (isSpeakingRef.current) {
       isInterruptedRef.current = true;
       isSpeakingRef.current = false;
@@ -479,16 +514,15 @@ export default function PhoneSimulator() {
     await processVoiceTurn(text);
   };
 
-  // Manual Mic Trigger (if user clicks microphone icon manually)
+  // Manual Mic Toggle
   const handleManualMicClick = () => {
     if (isSpeakingRef.current) {
-      // Manual click while assistant speaking triggers instant barge-in!
       isInterruptedRef.current = true;
       isSpeakingRef.current = false;
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
       setCallPhase('INTERRUPTED');
       setTimeout(() => {
-        listenForCallerSpeech(session?.language || 'HI');
+        startListeningForCaller(session?.language || 'HI');
       }, 200);
       return;
     }
@@ -499,7 +533,7 @@ export default function PhoneSimulator() {
       }
       setCallPhase('IDLE');
     } else {
-      listenForCallerSpeech(session?.language || 'HI');
+      startListeningForCaller(session?.language || 'HI');
     }
   };
 
@@ -510,6 +544,7 @@ export default function PhoneSimulator() {
     isProcessingTurnRef.current = false;
 
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (ttsSafetyTimeoutRef.current) clearTimeout(ttsSafetyTimeoutRef.current);
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch (e) {}
     }
@@ -550,22 +585,22 @@ export default function PhoneSimulator() {
             <div className="flex items-center gap-2">
               <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-slate-950" />
-                Phase 5 Natural Voice Telephony
+                Natural Voice Conversation UX
               </span>
-              <h1 className="text-xl font-black text-white">Continuous Voice + Speech Interruption (Barge-In)</h1>
+              <h1 className="text-xl font-black text-white">Automated Continuous Voice + Barge-In Interruption</h1>
             </div>
             <p className="text-xs text-amber-300 font-bold mt-1 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-              <span>Natural Spoken Dialogue with Continuous Microphone & Speech Interruption (Barge-In)</span>
+              <span>JanSethu Speaks First $\rightarrow$ Mic Listens Automatically $\rightarrow$ Speech Interruption Supported</span>
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Supports continuous microphone monitoring, instant TTS cancellation on user interruption, Hindi/Marathi/English NLU, and DTMF keypad fallback.
+              No manual continue loop required. JanSethu automatically greets, listens, interrupts TTS on speech onset, and continues the multi-turn healthcare dialogue.
             </p>
           </div>
 
           <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold w-fit flex items-center gap-1.5">
             <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-            Live Continuous Telephony Voice
+            Hands-Free Automated Dialogue
           </span>
         </div>
 
@@ -615,7 +650,7 @@ export default function PhoneSimulator() {
                   onChange={(e) => setHandsFreeMode(e.target.checked)}
                   className="rounded bg-slate-800 border-slate-700 text-amber-400 focus:ring-0"
                 />
-                Continuous Loop
+                Hands-Free Loop
               </label>
               <div className="w-6 h-1 bg-slate-700 rounded-full"></div>
             </div>
@@ -632,7 +667,7 @@ export default function PhoneSimulator() {
               
               {/* Telephony Call Phase Status Pill */}
               <span className={`font-bold px-2 py-0.5 rounded uppercase flex items-center gap-1 text-[10px] ${
-                callPhase === 'ASSISTANT_SPEAKING'
+                callPhase === 'JANSETHU_SPEAKING'
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
                   : callPhase === 'INTERRUPTED'
                   ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 animate-bounce font-extrabold'
@@ -644,7 +679,7 @@ export default function PhoneSimulator() {
                   ? 'bg-emerald-500/20 text-emerald-300'
                   : 'bg-slate-800 text-slate-400'
               }`}>
-                {callPhase === 'ASSISTANT_SPEAKING' && <Volume2 className="w-3 h-3 text-amber-400" />}
+                {callPhase === 'JANSETHU_SPEAKING' && <Volume2 className="w-3 h-3 text-amber-400" />}
                 {callPhase === 'INTERRUPTED' && <Zap className="w-3 h-3 text-purple-400 fill-purple-400 animate-spin" />}
                 {(callPhase === 'USER_SPEAKING' || callPhase === 'LISTENING') && <Mic className="w-3 h-3 text-rose-400" />}
                 {callPhase === 'PROCESSING' && <RefreshCw className="w-3 h-3 animate-spin text-sky-400" />}
@@ -657,7 +692,7 @@ export default function PhoneSimulator() {
               <div className="text-center py-6 space-y-2">
                 <Smartphone className="w-8 h-8 text-sky-400 mx-auto opacity-70" />
                 <p className="text-xs font-bold text-sky-200">JanSethu Voice Hotline Ready</p>
-                <p className="text-[10px] text-sky-400">Click [ CALL JANSETHU ] for continuous voice + barge-in conversation</p>
+                <p className="text-[10px] text-sky-400">Click [ CALL JANSETHU ] for automatic continuous voice conversation</p>
               </div>
             ) : (
               <div className="space-y-2 text-xs">
@@ -671,7 +706,7 @@ export default function PhoneSimulator() {
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="text-amber-300 font-bold uppercase flex items-center gap-1">
                       <Volume2 className="w-3 h-3 animate-pulse" />
-                      Voice Speaker Prompt
+                      JanSethu AI Voice Response
                     </span>
                     <div className="flex items-center gap-1">
                       <button
@@ -681,9 +716,9 @@ export default function PhoneSimulator() {
                         title="Click to replay AI spoken voice"
                       >
                         <Volume2 className="w-3 h-3 text-slate-950" />
-                        <span>🔊 Suno AI Ki Awaz</span>
+                        <span>🔊 Replay Voice</span>
                       </button>
-                      {callPhase === 'ASSISTANT_SPEAKING' && (
+                      {callPhase === 'JANSETHU_SPEAKING' && (
                         <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1.5 py-0.2 rounded font-bold">SPEAKING</span>
                       )}
                       {callPhase === 'INTERRUPTED' && (
@@ -737,12 +772,11 @@ export default function PhoneSimulator() {
                   </div>
                 )}
 
-
                 {(callPhase === 'LISTENING' || callPhase === 'USER_SPEAKING') && (
                   <div className="bg-rose-950/80 border border-rose-700/80 p-2 rounded-xl text-rose-200 text-[11px] font-bold flex items-center justify-between animate-pulse">
                     <span className="flex items-center gap-1.5">
                       <Mic className="w-3.5 h-3.5 text-rose-400" />
-                      {callPhase === 'USER_SPEAKING' ? '🗣️ User speaking...' : '🎙️ Continuous Microphone active...'}
+                      {callPhase === 'USER_SPEAKING' ? '🗣️ User speaking...' : '🎙️ Continuous Microphone Active (Speak now...)'}
                     </span>
                     <span className="w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
                   </div>
@@ -753,9 +787,9 @@ export default function PhoneSimulator() {
                   <div className="pt-1 text-[11px] space-y-1">
                     <span className="text-[10px] font-bold text-sky-300 uppercase">DTMF Menu Options:</span>
                     <div className="grid grid-cols-2 gap-1 text-[10px]">
-                      {session.options.map((opt) => (
-                        <div key={opt.key} className="bg-sky-900/60 px-2 py-1 rounded text-sky-200 font-medium">
-                          <strong className="text-amber-300">[{opt.key}]</strong> {opt.label}
+                      {session.options.map((opt, idx) => (
+                        <div key={idx} className="bg-sky-900/60 px-2 py-1 rounded text-sky-200 font-medium">
+                          <strong className="text-amber-300">[{typeof opt === 'object' ? opt.key : idx + 1}]</strong> {typeof opt === 'object' ? opt.label : opt}
                         </div>
                       ))}
                     </div>
@@ -766,7 +800,7 @@ export default function PhoneSimulator() {
 
             {/* Screen Footer */}
             <div className="text-[9px] text-sky-400 text-center font-mono border-t border-sky-800/80 pt-1">
-              {loading ? 'Processing Telephony Domain Request...' : handsFreeMode ? 'Continuous Mic + Barge-In Active' : 'Push-to-Talk / DTMF Active'}
+              {loading ? 'Processing Conversation Request...' : handsFreeMode ? 'Automated Continuous Voice + Barge-In Active' : 'Push-to-Talk / DTMF Active'}
             </div>
           </div>
 
@@ -839,7 +873,7 @@ export default function PhoneSimulator() {
           {inputMode === 'VOICE' && (
             <div className="space-y-2 pt-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Voice Utterance (Continuous Speech / Barge-In Interrupt)
+                Spoken Utterance Input (Optional Text Fallback)
               </span>
               <form onSubmit={handleSendVoiceUtterance} className="space-y-2">
                 <div className="relative">
@@ -862,11 +896,11 @@ export default function PhoneSimulator() {
                     onClick={handleManualMicClick}
                     disabled={loading || !session || session?.status !== 'ACTIVE'}
                     className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition ${
-                      callPhase === 'LISTENING' || callPhase === 'USER_SPEAKING' ? 'bg-rose-500 text-white animate-bounce' : callPhase === 'ASSISTANT_SPEAKING' ? 'bg-purple-600 text-white animate-pulse' : 'text-slate-400 hover:text-amber-400'
+                      callPhase === 'LISTENING' || callPhase === 'USER_SPEAKING' ? 'bg-rose-500 text-white animate-bounce' : callPhase === 'JANSETHU_SPEAKING' ? 'bg-purple-600 text-white animate-pulse' : 'text-slate-400 hover:text-amber-400'
                     }`}
-                    title={callPhase === 'ASSISTANT_SPEAKING' ? "Click to interrupt assistant speech (Barge-In)" : "Click to toggle microphone"}
+                    title={callPhase === 'JANSETHU_SPEAKING' ? "Click to interrupt assistant speech (Barge-In)" : "Click to toggle microphone"}
                   >
-                    {callPhase === 'ASSISTANT_SPEAKING' ? <Zap className="w-4 h-4 fill-white" /> : <Mic className="w-4 h-4" />}
+                    {callPhase === 'JANSETHU_SPEAKING' ? <Zap className="w-4 h-4 fill-white" /> : <Mic className="w-4 h-4" />}
                   </button>
                 </div>
                 <button
@@ -1030,7 +1064,7 @@ export default function PhoneSimulator() {
 
             {!session ? (
               <p className="text-xs text-slate-500 font-medium py-4 text-center">
-                No active phone call session. Click <strong>CALL JANSETHU</strong> to start continuous voice dialog.
+                No active phone call session. Click <strong>CALL JANSETHU</strong> to start automated continuous voice dialogue.
               </p>
             ) : (
               <div className="space-y-3 text-xs">
