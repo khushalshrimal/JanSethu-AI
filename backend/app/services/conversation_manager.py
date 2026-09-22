@@ -673,18 +673,47 @@ class ConversationManager:
         my_apts = tool_data.get("my_appointments")
         if my_apts is not None:
             if my_apts:
-                apt = my_apts[0]
-                ref_code = apt["confirmation_code"]
-                doc_name = apt["doctor_name"]
-                fac_name = apt["facility_name"]
-                apt_dt = apt["appointment_date"]
-                if language == Language.HI:
-                    return f"Aapki active appointment: {doc_name} ({fac_name}) ke saath {apt_dt} ko. Referral ID: {ref_code}."
+                active_apts = [
+                    a for a in my_apts 
+                    if str(a.get("status", "")).upper() in ["BOOKED", "CONFIRMED", "PENDING", "APPOINTMENTSTATUS.BOOKED", "APPOINTMENTSTATUS.CONFIRMED", "APPOINTMENTSTATUS.PENDING"]
+                ]
+                if active_apts:
+                    apt = active_apts[0]
+                    ref_code = apt["confirmation_code"]
+                    doc_name = apt["doctor_name"]
+                    fac_name = apt["facility_name"]
+                    apt_dt = apt["appointment_date"]
+                    if language == Language.HI:
+                        return f"Aapki active appointment: {doc_name} ({fac_name}) ke saath {apt_dt} ko. Referral ID: {ref_code}."
+                    elif language == Language.MR:
+                        return f"आपली नोंदवलेली अपॉइंटमेंट: {doc_name} ({fac_name}) सोबत {apt_dt} रोजी. Referral ID: {ref_code}."
+                    else:
+                        return f"You have 1 active appointment with {doc_name} at {fac_name} on {apt_dt}. Referral ID: {ref_code}."
                 else:
-                    return f"You have 1 active appointment with {doc_name} at {fac_name} on {apt_dt}. Referral ID: {ref_code}."
+                    cancelled_apts = [
+                        a for a in my_apts 
+                        if str(a.get("status", "")).upper() in ["CANCELLED", "APPOINTMENTSTATUS.CANCELLED"]
+                    ]
+                    if cancelled_apts:
+                        ref_code = cancelled_apts[0]["confirmation_code"]
+                        if language == Language.HI:
+                            return f"Aapki appointment (Referral ID: {ref_code}) cancel ho chuki hai. Abhi aapki koi active upcoming appointment nahi hai."
+                        elif language == Language.MR:
+                            return f"आपली अपॉइंटमेंट (Referral ID: {ref_code}) रद्द झाली आहे. सध्या कोणतीही सक्रिय अपॉइंटमेंट नाही."
+                        else:
+                            return f"Your appointment (Referral ID: {ref_code}) has been cancelled. You currently have no active upcoming appointments."
+                    else:
+                        if language == Language.HI:
+                            return "Abhi mujhe aapki koi confirmed appointment nahi mil rahi."
+                        elif language == Language.MR:
+                            return "सध्या कोणतीही निश्चित अपॉइंटमेंट सापडली नाही."
+                        else:
+                            return "No confirmed appointments were found for your account."
             else:
                 if language == Language.HI:
                     return "Abhi mujhe aapki koi confirmed appointment nahi mil rahi."
+                elif language == Language.MR:
+                    return "सध्या कोणतीही निश्चित अपॉइंटमेंट सापडली नाही."
                 else:
                     return "No confirmed appointments were found for your account."
 

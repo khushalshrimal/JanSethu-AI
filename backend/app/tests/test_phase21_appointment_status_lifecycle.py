@@ -278,5 +278,32 @@ class TestPhase21AppointmentStatusLifecycle(unittest.TestCase):
         self.assertEqual(fetched.id, res.id)
         self.assertEqual(fetched.confirmation_code, res.confirmation_code)
 
+    # 19. Cancelled appointment is not announced as an active appointment in ConversationManager
+    def test_19_cancelled_appointment_not_announced_as_active(self):
+        from app.services.conversation_manager import ConversationManager
+        res = self._create_test_appointment(28)
+        AppointmentService.cancel_appointment(self.db, res.id, AppointmentCancelRequest(reason="Cancel test"), self.customer_user)
+
+        tool_data = {
+            "my_appointments": [
+                {
+                    "id": res.id,
+                    "confirmation_code": res.confirmation_code,
+                    "doctor_name": "Dr. Test",
+                    "facility_name": "Test Hospital",
+                    "appointment_date": "2026-10-01",
+                    "status": "CANCELLED"
+                }
+            ]
+        }
+        msg = ConversationManager.generate_response(
+            intent=NLUIntent.MY_APPOINTMENTS,
+            entities=Entities(),
+            tool_data=tool_data,
+            language=Language.HI
+        )
+        self.assertIn("cancel ho chuki hai", msg)
+        self.assertNotIn("Aapki active appointment:", msg)
+
 if __name__ == "__main__":
     unittest.main()

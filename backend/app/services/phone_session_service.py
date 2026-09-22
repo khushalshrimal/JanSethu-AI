@@ -494,12 +494,15 @@ class PhoneSessionService:
                 if session.user_id:
                     recent_apt = db.query(Appointment).filter(
                         Appointment.patient.has(user_id=session.user_id),
-                        Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                        Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
                     ).order_by(Appointment.id.desc()).first()
 
-                if not recent_apt:
+                if not recent_apt and session.phone_number:
+                    from app.utils.phone_normalizer import normalize_phone_number
+                    norm_phone = normalize_phone_number(session.phone_number)
                     recent_apt = db.query(Appointment).filter(
-                        Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                        Appointment.patient.has(PatientProfile.user.has(User.phone_number == norm_phone)),
+                        Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
                     ).order_by(Appointment.id.desc()).first()
 
                 if recent_apt:
@@ -524,12 +527,15 @@ class PhoneSessionService:
             if session.user_id:
                 recent_apt = db.query(Appointment).filter(
                     Appointment.patient.has(user_id=session.user_id),
-                    Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                    Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
                 ).order_by(Appointment.id.desc()).first()
 
-            if not recent_apt:
+            if not recent_apt and session.phone_number:
+                from app.utils.phone_normalizer import normalize_phone_number
+                norm_phone = normalize_phone_number(session.phone_number)
                 recent_apt = db.query(Appointment).filter(
-                    Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                    Appointment.patient.has(PatientProfile.user.has(User.phone_number == norm_phone)),
+                    Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
                 ).order_by(Appointment.id.desc()).first()
 
             if recent_apt:
@@ -636,13 +642,16 @@ class PhoneSessionService:
             recent_apt = db.query(Appointment).filter(
                 Appointment.patient.has(user_id=session.user_id),
                 Appointment.appointment_date == today,
-                Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
             ).order_by(Appointment.id.desc()).first()
 
-        if not recent_apt:
+        if not recent_apt and session.phone_number:
+            from app.utils.phone_normalizer import normalize_phone_number
+            norm_phone = normalize_phone_number(session.phone_number)
             recent_apt = db.query(Appointment).filter(
+                Appointment.patient.has(PatientProfile.user.has(User.phone_number == norm_phone)),
                 Appointment.appointment_date == today,
-                Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
             ).order_by(Appointment.id.desc()).first()
 
         if recent_apt:
@@ -1117,18 +1126,15 @@ class PhoneSessionService:
                     if patient:
                         recent_apt = db.query(Appointment).filter(
                             Appointment.patient_id == patient.id,
-                            Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                            Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
                         ).order_by(Appointment.id.desc()).first()
 
                 if not recent_apt and session.phone_number:
+                    from app.utils.phone_normalizer import normalize_phone_number
+                    norm_phone = normalize_phone_number(session.phone_number)
                     recent_apt = db.query(Appointment).filter(
-                        Appointment.patient.has(PatientProfile.user.has(User.phone_number == session.phone_number)),
-                        Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
-                    ).order_by(Appointment.id.desc()).first()
-
-                if not recent_apt:
-                    recent_apt = db.query(Appointment).filter(
-                        Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                        Appointment.patient.has(PatientProfile.user.has(User.phone_number == norm_phone)),
+                        Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
                     ).order_by(Appointment.id.desc()).first()
 
                 if recent_apt:
@@ -1160,12 +1166,15 @@ class PhoneSessionService:
             if session.user_id:
                 recent_apt = db.query(Appointment).filter(
                     Appointment.patient.has(user_id=session.user_id),
-                    Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                    Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
                 ).order_by(Appointment.id.desc()).first()
 
-            if not recent_apt:
+            if not recent_apt and session.phone_number:
+                from app.utils.phone_normalizer import normalize_phone_number
+                norm_phone = normalize_phone_number(session.phone_number)
                 recent_apt = db.query(Appointment).filter(
-                    Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED])
+                    Appointment.patient.has(PatientProfile.user.has(User.phone_number == norm_phone)),
+                    Appointment.status.in_([AppointmentStatus.CONFIRMED, AppointmentStatus.BOOKED, AppointmentStatus.PENDING])
                 ).order_by(Appointment.id.desc()).first()
 
             if recent_apt:
@@ -1425,19 +1434,32 @@ class PhoneSessionService:
                     Appointment.patient.has(user_id=session.user_id)
                 ).order_by(Appointment.id.desc()).first()
 
-            if not recent_apt:
-                recent_apt = db.query(Appointment).order_by(Appointment.id.desc()).first()
+            if not recent_apt and session.phone_number:
+                from app.utils.phone_normalizer import normalize_phone_number
+                norm_phone = normalize_phone_number(session.phone_number)
+                recent_apt = db.query(Appointment).filter(
+                    Appointment.patient.has(PatientProfile.user.has(User.phone_number == norm_phone))
+                ).order_by(Appointment.id.desc()).first()
 
             if recent_apt:
-                prompt_text = VoicePromptProvider.get_prompt(
-                    "CHECK_APPOINTMENT_RESULT", lang,
-                    confirmation_code=recent_apt.confirmation_code,
-                    doctor_name=recent_apt.doctor.name if recent_apt.doctor else "Specialist",
-                    facility_name=recent_apt.facility.name if recent_apt.facility else "Hospital",
-                    date=str(recent_apt.appointment_date),
-                    start_time=str(recent_apt.start_time),
-                    status=str(recent_apt.status)
-                )
+                apt_status_str = recent_apt.status.value if hasattr(recent_apt.status, 'value') else str(recent_apt.status)
+                if apt_status_str.upper() == "CANCELLED":
+                    if lang == Language.HI:
+                        prompt_text = f"Aapki Referral ID {recent_apt.confirmation_code} wali appointment cancel ho chuki hai. Abhi aapki koi active upcoming appointment nahi hai."
+                    elif lang == Language.MR:
+                        prompt_text = f"आपली अपॉइंटमेंट {recent_apt.confirmation_code} रद्द झाली आहे. सध्या कोणतीही सक्रिय अपॉइंटमेंट नाही."
+                    else:
+                        prompt_text = f"Your appointment {recent_apt.confirmation_code} has been cancelled. You currently have no active upcoming appointments."
+                else:
+                    prompt_text = VoicePromptProvider.get_prompt(
+                        "CHECK_APPOINTMENT_RESULT", lang,
+                        confirmation_code=recent_apt.confirmation_code,
+                        doctor_name=recent_apt.doctor.name if recent_apt.doctor else "Specialist",
+                        facility_name=recent_apt.facility.name if recent_apt.facility else "Hospital",
+                        date=str(recent_apt.appointment_date),
+                        start_time=str(recent_apt.start_time),
+                        status=apt_status_str
+                    )
             else:
                 prompt_text = VoicePromptProvider.get_prompt("NO_APPOINTMENTS", lang)
             options = [PhoneMenuOption(key="1", label="Return to Main Menu")]
